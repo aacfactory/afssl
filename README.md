@@ -1,0 +1,2 @@
+# afssl
+self sign ssl
