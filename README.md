@@ -7,6 +7,7 @@ go get github.com/aacfactory/afssl
 ```
 
 ## Usage
+Generate Self Signed SSL.
 ```go
 config := afssl.CertificateConfig{
     Country:            "CN",
@@ -44,4 +45,18 @@ if clientErr != nil {
 fmt.Println(string(clientPEM))
 fmt.Println(string(clientKeyPEM))
 ```
-
+Generate `*tls.Config` via `ACME`. More DNS providers is [HERE](https://go-acme.github.io/lego/dns/) . Support Automatic RENEW.  
+```go
+os.Setenv("ALICLOUD_ACCESS_KEY", "your aliyun access key")
+os.Setenv("ALICLOUD_SECRET_KEY", "your aliyun sercet key")
+acme, acmeErr := afssl.NewAcme("foo@bar.com", "alidns", []string{"*.foo.bar"})
+if acmeErr != nil {
+    t.Error(acmeErr)
+    return
+}
+config, obtainErr := acme.Obtain()
+if obtainErr != nil {
+    t.Error(obtainErr)
+    return
+}
+```
