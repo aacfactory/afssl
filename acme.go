@@ -2,11 +2,11 @@ package afssl
 
 import (
 	"crypto"
-	"crypto/ecdsa"
-	"crypto/elliptic"
 	"crypto/rand"
+	"crypto/rsa"
 	"crypto/tls"
 	"crypto/x509"
+	"encoding/json"
 	"encoding/pem"
 	"fmt"
 	"github.com/go-acme/lego/v4/certificate"
@@ -19,8 +19,8 @@ import (
 	slog "log"
 	"net/http"
 	"os"
+	"path/filepath"
 	"strings"
-	"sync"
 	"time"
 )
 
@@ -39,6 +39,14 @@ type AcmeLogger interface {
 }
 
 type AcmeOption func(*AcmeOptions) error
+
+func AcmeCertificateCacheDIR(v string) AcmeOption {
+	return func(options *AcmeOptions) error {
+		v = strings.TrimSpace(v)
+		options.CacheDIR = v
+		return nil
+	}
+}
 
 func AcmeRequestCertificateTimeout(v time.Duration) AcmeOption {
 	return func(options *AcmeOptions) error {
@@ -61,11 +69,12 @@ func CustomizeAcmeLogger(v AcmeLogger) AcmeOption {
 }
 
 type AcmeOptions struct {
+	CacheDIR                  string
 	RequestCertificateTimeout time.Duration
 	Log                       AcmeLogger
 }
 
-func NewAcme(email string, dnsProvider string, domains []string, opts ...AcmeOption) (v Acme, err error) {
+func NewAcme(email string, dnsProvider string, domain string, opts ...AcmeOption) (v Acme, err error) {
 	email = strings.TrimSpace(email)
 	if email == "" || strings.Index(email, "@") < 1 {
 		err = fmt.Errorf("afssl: new acme failed, email is invalid")
@@ -76,19 +85,13 @@ func NewAcme(email string, dnsProvider string, domains []string, opts ...AcmeOpt
 		err = fmt.Errorf("afssl: new acme failed, dns provider is empty")
 		return
 	}
-	if domains == nil || len(domains) == 0 {
-		err = fmt.Errorf("afssl: new acme failed, domains is empty")
+	domain = strings.TrimSpace(domain)
+	if domain == "" {
+		err = fmt.Errorf("afssl: new acme failed, one of domains is empty")
 		return
 	}
-	for i, domain := range domains {
-		domain = strings.TrimSpace(domain)
-		if domain == "" {
-			err = fmt.Errorf("afssl: new acme failed, one of domains is empty")
-			return
-		}
-		domains[i] = domain
-	}
 	opt := &AcmeOptions{
+		CacheDIR:                  "",
 		RequestCertificateTimeout: 30 * time.Second,
 		Log:                       nil,
 	}
@@ -112,17 +115,61 @@ func NewAcme(email string, dnsProvider string, domains []string, opts ...AcmeOpt
 		opt.Log = slog.New(out, "", slog.LstdFlags)
 	}
 	log.Logger = opt.Log
-
-	privateKey, privateKeyErr := ecdsa.GenerateKey(elliptic.P256(), rand.Reader)
-	if privateKeyErr != nil {
-		err = fmt.Errorf("afssl: new acme failed, generate private key failed, %v", privateKeyErr)
-		return
+	cachedDIR := strings.TrimSpace(opt.CacheDIR)
+	if cachedDIR == "" {
+		cachedDIR = ".afssl"
+	}
+	if !pathExist(cachedDIR) {
+		mkErr := os.MkdirAll(cachedDIR, 0600)
+		if mkErr != nil {
+			err = fmt.Errorf("afssl: make acme certificates cached dir(%s) failed, %v", cachedDIR, mkErr)
+			return
+		}
 	}
 	user := &acmeUser{
 		Email: email,
-		key:   privateKey,
+		//key:   privateKey,
+	}
+	// cached registration
+	cachedRegistrationPath := filepath.Join(cachedDIR, fmt.Sprintf("%s.registration.json", email))
+	if pathExist(cachedRegistrationPath) {
+		acmeRegistrationBytes, readErr := ioutil.ReadFile(cachedRegistrationPath)
+		if readErr != nil {
+			err = fmt.Errorf("afssl: new acme failed, read cached registration failed, %v", readErr)
+			return
+		}
+		acmeRegistration := &registration.Resource{}
+		decodeErr := json.Unmarshal(acmeRegistrationBytes, acmeRegistration)
+		if decodeErr != nil {
+			err = fmt.Errorf("afssl: new acme failed, decode cached registration failed, %v", decodeErr)
+			return
+		}
+		user.Registration = acmeRegistration
+		// key
+		keyPath := filepath.Join(cachedDIR, fmt.Sprintf("%s.key", email))
+		userKeyPEM, readKeyErr := ioutil.ReadFile(keyPath)
+		if readKeyErr != nil {
+			err = fmt.Errorf("afssl: new acme failed, read cached user key failed, %v", readKeyErr)
+			return
+		}
+		keyBlock, _ := pem.Decode(userKeyPEM)
+		key, keyErr := x509.ParsePKCS1PrivateKey(keyBlock.Bytes)
+		if keyErr != nil {
+			err = fmt.Errorf("afssl: new acme failed, parse cached user key failed, %v", keyErr)
+			return
+		}
+		user.key = key
+	}
+	if user.key == nil {
+		key, keyErr := rsa.GenerateKey(rand.Reader, 2048)
+		if keyErr != nil {
+			err = fmt.Errorf("afssl: new acme failed, create user private key failed, %v", keyErr)
+			return
+		}
+		user.key = key
 	}
 	config := lego.NewConfig(user)
+	config.Certificate.Timeout = opt.RequestCertificateTimeout
 	client, clientErr := lego.NewClient(config)
 	if clientErr != nil {
 		err = fmt.Errorf("afssl: new acme failed, new acme client failed, %v", clientErr)
@@ -138,17 +185,30 @@ func NewAcme(email string, dnsProvider string, domains []string, opts ...AcmeOpt
 		err = fmt.Errorf("afssl: new acme failed, acme client set dns chanllenge provider failed, %v", setProviderErr)
 		return
 	}
-	acmeRegistration, registerErr := client.Registration.Register(registration.RegisterOptions{TermsOfServiceAgreed: true})
-	if registerErr != nil {
-		err = fmt.Errorf("afssl: new acme failed, acme client register failed, %v", registerErr)
-		return
+	if user.Registration == nil {
+
+		newRegistration, registerErr := client.Registration.Register(registration.RegisterOptions{TermsOfServiceAgreed: true})
+		if registerErr != nil {
+			err = fmt.Errorf("afssl: new acme failed, acme client register failed, %v", registerErr)
+			return
+		}
+		user.Registration = newRegistration
+		acmeRegistrationBytes, encodeErr := json.Marshal(newRegistration)
+		if encodeErr != nil {
+			err = fmt.Errorf("afssl: new acme failed, encode acme aegistration failed, %v", encodeErr)
+			return
+		}
+		wErr := ioutil.WriteFile(cachedRegistrationPath, acmeRegistrationBytes, 0600)
+		if wErr != nil {
+			err = fmt.Errorf("afssl: new acme failed, save acme aegistration cached failed, %v", wErr)
+			return
+		}
 	}
-	user.Registration = acmeRegistration
 	v = &acme{
-		client:  client,
-		domains: domains,
-		once:    sync.Once{},
-		stopCh:  make(chan struct{}, 1),
+		client:   client,
+		domain:   domain,
+		cacheDIR: cachedDIR,
+		stopCh:   make(chan struct{}, 1),
 	}
 	return
 }
@@ -156,35 +216,40 @@ func NewAcme(email string, dnsProvider string, domains []string, opts ...AcmeOpt
 type acme struct {
 	log          AcmeLogger
 	client       *lego.Client
-	domains      []string
-	once         sync.Once
+	domain       string
+	cacheDIR     string
 	config       *tls.Config
 	certificates *certificate.Resource
-	certPEM      []byte
 	renewAT      time.Time
-	err          error
 	stopCh       chan struct{}
 }
 
 func (a *acme) Obtain() (config *tls.Config, err error) {
-	a.once.Do(func() {
-		request := certificate.ObtainRequest{
-			Domains: a.domains,
-			Bundle:  true,
-		}
-		certificates, obtainErr := a.client.Certificate.Obtain(request)
-		if obtainErr != nil {
-			a.err = fmt.Errorf("afssl: obtain failed, %v", obtainErr)
-			return
-		}
-		handleErr := a.handle(certificates)
-		if handleErr != nil {
-			a.err = fmt.Errorf("afssl: obtain failed, %v", handleErr)
-			return
-		}
-	})
+	ok, cacheErr := a.getCached()
+	if cacheErr != nil {
+		err = cacheErr
+		return
+	}
+	if ok {
+		config = a.config
+		go a.renew()
+		return
+	}
+	request := certificate.ObtainRequest{
+		Domains: []string{a.domain},
+		Bundle:  true,
+	}
+	certificates, obtainErr := a.client.Certificate.Obtain(request)
+	if obtainErr != nil {
+		err = fmt.Errorf("afssl: obtain failed, %v", obtainErr)
+		return
+	}
+	handleErr := a.handle(certificates)
+	if handleErr != nil {
+		err = fmt.Errorf("afssl: obtain failed, %v", handleErr)
+		return
+	}
 	config = a.config
-	err = a.err
 	return
 }
 
@@ -193,27 +258,109 @@ func (a *acme) Close() {
 	close(a.stopCh)
 }
 
-func (a *acme) handle(certificates *certificate.Resource) (err error) {
-	resp, getErr := http.Get(certificates.CertStableURL)
-	if getErr != nil {
-		a.err = fmt.Errorf("afssl: handle certificates failed, get cert from %s failed, %v", certificates.CertStableURL, getErr)
+func (a *acme) makeupDomainForCached() (v string) {
+	if strings.Contains(a.domain, "*") {
+		v = strings.ReplaceAll(a.domain, "*", "[x]")
 		return
 	}
-	certPEM, readErr := ioutil.ReadAll(resp.Body)
-	if readErr != nil {
-		a.err = fmt.Errorf("afssl: handle certificates failed, read cert from response body failed, %v", readErr)
+	v = a.domain
+	return
+}
+
+func (a *acme) getCached() (ok bool, err error) {
+	cachedDomain := a.makeupDomainForCached()
+	// res
+	resPath := filepath.Join(a.cacheDIR, fmt.Sprintf("%s.json", cachedDomain))
+	if !pathExist(resPath) {
+		return
+	}
+	resBytes, readResErr := ioutil.ReadFile(resPath)
+	if readResErr != nil {
+		err = fmt.Errorf("afssl: read certificates resouce file from cached file(%s) failed, %v", resPath, readResErr)
+		return
+	}
+	certificates := &certificate.Resource{}
+	decodeResErr := json.Unmarshal(resBytes, certificates)
+	if decodeResErr != nil {
+		err = fmt.Errorf("afssl: decode read certificates resouce content from cached file(%s) failed, %v", resPath, decodeResErr)
+		return
+	}
+	// key
+	keyPath := filepath.Join(a.cacheDIR, fmt.Sprintf("%s.key", cachedDomain))
+	if !pathExist(keyPath) {
+		return
+	}
+	keyPEM, readKeyErr := ioutil.ReadFile(keyPath)
+	if readKeyErr != nil {
+		err = fmt.Errorf("afssl: read key pem file from cached file(%s) failed, %v", keyPath, readKeyErr)
+		return
+	}
+	// cert
+	certPath := filepath.Join(a.cacheDIR, fmt.Sprintf("%s.crt", cachedDomain))
+	if !pathExist(certPath) {
+		return
+	}
+	certPEM, readCertErr := ioutil.ReadFile(certPath)
+	if readCertErr != nil {
+		err = fmt.Errorf("afssl: read cert pem file from cached file(%s) failed, %v", certPath, readCertErr)
 		return
 	}
 	certBlock, _ := pem.Decode(certPEM)
 	cert0, parseCertificateErr := x509.ParseCertificate(certBlock.Bytes)
 	if parseCertificateErr != nil {
-		a.err = fmt.Errorf("afssl: handle certificates failed, parse cert pem failed, %v", parseCertificateErr)
+		err = fmt.Errorf("afssl: parse cached cert pem failed, %v", parseCertificateErr)
+		return
+	}
+	notAfter := cert0.NotAfter.Local()
+	if time.Now().After(notAfter) {
+		_ = os.Remove(resPath)
+		_ = os.Remove(certPath)
+		_ = os.Remove(keyPath)
+		return
+	}
+	cert, certErr := tls.X509KeyPair(certPEM, keyPEM)
+	if certErr != nil {
+		_ = os.Remove(resPath)
+		_ = os.Remove(certPath)
+		_ = os.Remove(keyPath)
+		return
+	}
+	a.config = &tls.Config{
+		Certificates: []tls.Certificate{cert},
+	}
+	a.certificates = certificates
+	a.renewAT = notAfter
+	ok = true
+	return
+}
+
+func (a *acme) handle(certificates *certificate.Resource) (err error) {
+	resp, getErr := http.Get(certificates.CertStableURL)
+	if getErr != nil {
+		err = fmt.Errorf("afssl: handle certificates failed, get cert from %s failed, %v", certificates.CertStableURL, getErr)
+		return
+	}
+	if resp.StatusCode != 200 {
+		body, _ := ioutil.ReadAll(resp.Body)
+		err = fmt.Errorf("afssl: handle certificates failed, get cert from %s failed, %v", certificates.CertStableURL, string(body))
+		return
+	}
+	certPEM, readErr := ioutil.ReadAll(resp.Body)
+	if readErr != nil {
+		err = fmt.Errorf("afssl: handle certificates failed, read cert from response body failed, %v", readErr)
+		return
+	}
+	certBlock, _ := pem.Decode(certPEM)
+	cert0, parseCertificateErr := x509.ParseCertificate(certBlock.Bytes)
+	if parseCertificateErr != nil {
+		err = fmt.Errorf("afssl: handle certificates failed, parse cert pem failed, %v", parseCertificateErr)
 		return
 	}
 	renewAT := cert0.NotAfter.Local()
-	cert, certErr := tls.X509KeyPair(certPEM, certificates.PrivateKey)
+	keyPEM := certificates.PrivateKey
+	cert, certErr := tls.X509KeyPair(certPEM, keyPEM)
 	if certErr != nil {
-		a.err = fmt.Errorf("afssl: handle certificates failed, make x509 key pair failed, %v", certErr)
+		err = fmt.Errorf("afssl: handle certificates failed, make x509 key pair failed, %v", certErr)
 		return
 	}
 	a.config = &tls.Config{
@@ -221,6 +368,31 @@ func (a *acme) handle(certificates *certificate.Resource) (err error) {
 	}
 	a.certificates = certificates
 	a.renewAT = renewAT
+	// make cache
+	cachedDomain := a.makeupDomainForCached()
+	resBytes, encodeResErr := json.Marshal(a.certificates)
+	if encodeResErr != nil {
+		err = fmt.Errorf("afssl: encode acme certificates failed, %v", encodeResErr)
+		return
+	}
+	resPath := filepath.Join(a.cacheDIR, fmt.Sprintf("%s.json", cachedDomain))
+	writeResErr := ioutil.WriteFile(resPath, resBytes, 0600)
+	if writeResErr != nil {
+		err = fmt.Errorf("afssl: write acme certificates cache failed, %v", writeResErr)
+		return
+	}
+	certPath := filepath.Join(a.cacheDIR, fmt.Sprintf("%s.crt", cachedDomain))
+	writeCertErr := ioutil.WriteFile(certPath, certPEM, 0600)
+	if writeCertErr != nil {
+		err = fmt.Errorf("afssl: write acme cert pem cache failed, %v", writeCertErr)
+		return
+	}
+	keyPath := filepath.Join(a.cacheDIR, fmt.Sprintf("%s.key", cachedDomain))
+	writeKeyErr := ioutil.WriteFile(keyPath, keyPEM, 0600)
+	if writeKeyErr != nil {
+		err = fmt.Errorf("afssl: write acme key pem cache failed, %v", writeKeyErr)
+		return
+	}
 	go a.renew()
 	return
 }
