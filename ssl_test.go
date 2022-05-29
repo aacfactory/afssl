@@ -6,32 +6,40 @@ import (
 	"testing"
 )
 
-func TestGenerateSSL(t *testing.T) {
-	config := afssl.Config{
-		KeyBits:            1024,
+func TestGenerateCertificate(t *testing.T) {
+	config := afssl.CertificateConfig{
 		Country:            "CN",
 		Province:           "Shanghai",
 		City:               "Shanghai",
-		Organization:       "AAC FACTORY",
-		OrganizationalUnit: "AF",
+		Organization:       "AACFACTORY",
+		OrganizationalUnit: "TECH",
 		CommonName:         "AFSSL",
-		IPs:                []string{"192.168.22.33"},
-		DelegationEnabled:  true,
-		Expiration:         afssl.ThreeMouths,
+		IPs:                nil,
+		Emails:             nil,
+		DNSNames:           nil,
 	}
-
-	caPEM, caKeyPEM, serverPEM, serverKeyPEM, clientPEM, clientKeyPEM, err := afssl.GenerateSSL(config)
-	if err != nil {
-		fmt.Println(err)
+	// ca
+	caPEM, caKeyPEM, caErr := afssl.GenerateCertificate(config, afssl.CA())
+	if caErr != nil {
+		t.Error("ca", caErr)
 		return
 	}
-	fmt.Println("ca---------------------------")
 	fmt.Println(string(caPEM))
 	fmt.Println(string(caKeyPEM))
-	fmt.Println("server---------------------------")
+	// server
+	serverPEM, serverKeyPEM, serverErr := afssl.GenerateCertificate(config, afssl.WithParent(caPEM, caKeyPEM))
+	if serverErr != nil {
+		t.Error("server", serverErr)
+		return
+	}
 	fmt.Println(string(serverPEM))
 	fmt.Println(string(serverKeyPEM))
-	fmt.Println("client---------------------------")
+	// client
+	clientPEM, clientKeyPEM, clientErr := afssl.GenerateCertificate(config, afssl.WithParent(caPEM, caKeyPEM))
+	if clientErr != nil {
+		t.Error("client", clientErr)
+		return
+	}
 	fmt.Println(string(clientPEM))
 	fmt.Println(string(clientKeyPEM))
 }
