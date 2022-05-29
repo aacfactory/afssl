@@ -47,9 +47,12 @@ fmt.Println(string(clientKeyPEM))
 ```
 Generate `*tls.Config` via `ACME`. More DNS providers is [HERE](https://go-acme.github.io/lego/dns/) . Support Automatic RENEW.  Thanks to [LEGO](https://github.com/go-acme/lego).
 ```go
-os.Setenv("ALICLOUD_ACCESS_KEY", "your aliyun access key")
-os.Setenv("ALICLOUD_SECRET_KEY", "your aliyun sercet key")
-acme, acmeErr := afssl.NewAcme("foo@bar.com", "alidns", "*.foo.bar")
+cacheManager, cacheManagerErr := afssl.NewFileAcmeCacheManager("G:/acme4")
+if cacheManagerErr != nil {
+    t.Error(cacheManagerErr)
+    return
+}
+acme, acmeErr := afssl.NewAcme("acme@foo.bar", "alidns", "*.foo.bar", afssl.CustomizeAcmeCacheManager(cacheManager))
 if acmeErr != nil {
     t.Error(acmeErr)
     return
