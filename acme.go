@@ -117,7 +117,7 @@ func NewAcme(email string, dnsProvider string, domain string, opts ...AcmeOption
 	log.Logger = opt.Log
 	cachedDIR := strings.TrimSpace(opt.CacheDIR)
 	if cachedDIR == "" {
-		cachedDIR = ".afssl"
+		cachedDIR = "~/.afssl"
 	}
 	if !pathExist(cachedDIR) {
 		mkErr := os.MkdirAll(cachedDIR, 0600)
@@ -128,7 +128,6 @@ func NewAcme(email string, dnsProvider string, domain string, opts ...AcmeOption
 	}
 	user := &acmeUser{
 		Email: email,
-		//key:   privateKey,
 	}
 	// cached registration
 	cachedRegistrationPath := filepath.Join(cachedDIR, fmt.Sprintf("%s.registration.json", email))

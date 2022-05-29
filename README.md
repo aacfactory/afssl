@@ -49,7 +49,7 @@ Generate `*tls.Config` via `ACME`. More DNS providers is [HERE](https://go-acme.
 ```go
 os.Setenv("ALICLOUD_ACCESS_KEY", "your aliyun access key")
 os.Setenv("ALICLOUD_SECRET_KEY", "your aliyun sercet key")
-acme, acmeErr := afssl.NewAcme("foo@bar.com", "alidns", []string{"*.foo.bar"})
+acme, acmeErr := afssl.NewAcme("foo@bar.com", "alidns", "*.foo.bar")
 if acmeErr != nil {
     t.Error(acmeErr)
     return
@@ -59,4 +59,5 @@ if obtainErr != nil {
     t.Error(obtainErr)
     return
 }
+acme.Close()
 ```
