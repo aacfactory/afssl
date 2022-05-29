@@ -45,7 +45,7 @@ if clientErr != nil {
 fmt.Println(string(clientPEM))
 fmt.Println(string(clientKeyPEM))
 ```
-Generate `*tls.Config` via `ACME`. More DNS providers is [HERE](https://go-acme.github.io/lego/dns/) . Support Automatic RENEW.  
+Generate `*tls.Config` via `ACME`. More DNS providers is [HERE](https://go-acme.github.io/lego/dns/) . Support Automatic RENEW.  Thanks to [LEGO](https://github.com/go-acme/lego).
 ```go
 os.Setenv("ALICLOUD_ACCESS_KEY", "your aliyun access key")
 os.Setenv("ALICLOUD_SECRET_KEY", "your aliyun sercet key")
