@@ -186,7 +186,6 @@ func NewAcme(email string, dnsProvider string, domain string, opts ...AcmeOption
 		return
 	}
 	if user.Registration == nil {
-
 		newRegistration, registerErr := client.Registration.Register(registration.RegisterOptions{TermsOfServiceAgreed: true})
 		if registerErr != nil {
 			err = fmt.Errorf("afssl: new acme failed, acme client register failed, %v", registerErr)
@@ -195,12 +194,21 @@ func NewAcme(email string, dnsProvider string, domain string, opts ...AcmeOption
 		user.Registration = newRegistration
 		acmeRegistrationBytes, encodeErr := json.Marshal(newRegistration)
 		if encodeErr != nil {
-			err = fmt.Errorf("afssl: new acme failed, encode acme aegistration failed, %v", encodeErr)
+			err = fmt.Errorf("afssl: new acme failed, encode acme user registration failed, %v", encodeErr)
 			return
 		}
-		wErr := ioutil.WriteFile(cachedRegistrationPath, acmeRegistrationBytes, 0600)
-		if wErr != nil {
-			err = fmt.Errorf("afssl: new acme failed, save acme aegistration cached failed, %v", wErr)
+		writeRegErr := ioutil.WriteFile(cachedRegistrationPath, acmeRegistrationBytes, 0600)
+		if writeRegErr != nil {
+			err = fmt.Errorf("afssl: new acme failed, save acme cached user registration  failed, %v", writeRegErr)
+			return
+		}
+		keyPEM := pem.EncodeToMemory(&pem.Block{
+			Type:  "RSA PRIVATE KEY",
+			Bytes: x509.MarshalPKCS1PrivateKey(user.key.(*rsa.PrivateKey)),
+		})
+		writeKeyErr := ioutil.WriteFile(filepath.Join(cachedDIR, fmt.Sprintf("%s.key", email)), keyPEM, 0600)
+		if writeKeyErr != nil {
+			err = fmt.Errorf("afssl: new acme failed, save acme cached user key  failed, %v", writeKeyErr)
 			return
 		}
 	}

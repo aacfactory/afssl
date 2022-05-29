@@ -3,14 +3,13 @@ package afssl_test
 import (
 	"fmt"
 	"github.com/aacfactory/afssl"
-	"os"
 	"testing"
 )
 
 func TestNewAcme(t *testing.T) {
-	os.Setenv("ALICLOUD_ACCESS_KEY", "your aliyun access key")
-	os.Setenv("ALICLOUD_SECRET_KEY", "your aliyun sercet key")
-	acme, acmeErr := afssl.NewAcme("acme@aacfactory.co", "alidns", "*.aacfactory.co", afssl.AcmeCertificateCacheDIR("G:/acme"))
+	//os.Setenv("ALICLOUD_ACCESS_KEY", "your aliyun access key")
+	//os.Setenv("ALICLOUD_SECRET_KEY", "your aliyun sercet key")
+	acme, acmeErr := afssl.NewAcme("acme@aacfactory.co", "alidns", "*.aacfactory.com", afssl.AcmeCertificateCacheDIR("G:/acme"))
 	if acmeErr != nil {
 		t.Error(acmeErr)
 		return
