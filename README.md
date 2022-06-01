@@ -45,22 +45,3 @@ if clientErr != nil {
 fmt.Println(string(clientPEM))
 fmt.Println(string(clientKeyPEM))
 ```
-Generate `*tls.Config` via `ACME`. More DNS providers is [HERE](https://go-acme.github.io/lego/dns/) . Support Automatic RENEW.  Thanks to [LEGO](https://github.com/go-acme/lego).
-```go
-cacheManager, cacheManagerErr := afssl.NewFileAcmeCacheManager("G:/acme4")
-if cacheManagerErr != nil {
-    t.Error(cacheManagerErr)
-    return
-}
-acme, acmeErr := afssl.NewAcme("acme@foo.bar", "alidns", "*.foo.bar", afssl.CustomizeAcmeCacheManager(cacheManager))
-if acmeErr != nil {
-    t.Error(acmeErr)
-    return
-}
-config, obtainErr := acme.Obtain()
-if obtainErr != nil {
-    t.Error(obtainErr)
-    return
-}
-acme.Close()
-```

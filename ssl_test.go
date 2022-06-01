@@ -8,11 +8,11 @@ import (
 
 func TestGenerateCertificate(t *testing.T) {
 	config := afssl.CertificateConfig{
-		Country:            "CN",
-		Province:           "Shanghai",
-		City:               "Shanghai",
-		Organization:       "AACFACTORY",
-		OrganizationalUnit: "TECH",
+		Country:            "",
+		Province:           "",
+		City:               "",
+		Organization:       "",
+		OrganizationalUnit: "",
 		CommonName:         "AFSSL",
 		IPs:                nil,
 		Emails:             nil,
