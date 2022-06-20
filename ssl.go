@@ -67,7 +67,29 @@ func WithParent(certPEM []byte, keyPEM []byte) GenerateCertificateOption {
 	}
 }
 
+func With2048KeyBits() GenerateCertificateOption {
+	return func(options *GenerateCertificateOptions) error {
+		options.keyBits = 2048
+		return nil
+	}
+}
+
+func With4096KeyBits() GenerateCertificateOption {
+	return func(options *GenerateCertificateOptions) error {
+		options.keyBits = 4096
+		return nil
+	}
+}
+
+func With8192KeyBits() GenerateCertificateOption {
+	return func(options *GenerateCertificateOptions) error {
+		options.keyBits = 8192
+		return nil
+	}
+}
+
 type GenerateCertificateOptions struct {
+	keyBits      int
 	serialNumber *big.Int
 	expire       time.Duration
 	isCA         bool
@@ -88,12 +110,6 @@ type CertificateConfig struct {
 }
 
 func GenerateCertificate(config CertificateConfig, opts ...GenerateCertificateOption) (certPEM []byte, keyPEM []byte, err error) {
-	// RSA KEY
-	key, keyErr := rsa.GenerateKey(rand.Reader, 2048)
-	if keyErr != nil {
-		err = fmt.Errorf("generate certificate failed, %v", keyErr)
-		return
-	}
 	// SN
 	serialNumber, randSNErr := rand.Int(rand.Reader, new(big.Int).Lsh(big.NewInt(1), 128))
 	if randSNErr != nil {
@@ -102,6 +118,7 @@ func GenerateCertificate(config CertificateConfig, opts ...GenerateCertificateOp
 	}
 	// OPT
 	opt := &GenerateCertificateOptions{
+		keyBits:      4096,
 		serialNumber: serialNumber,
 		expire:       365 * 24 * time.Hour,
 		isCA:         false,
@@ -117,6 +134,13 @@ func GenerateCertificate(config CertificateConfig, opts ...GenerateCertificateOp
 			}
 		}
 	}
+	// RSA KEY
+	key, keyErr := rsa.GenerateKey(rand.Reader, opt.keyBits)
+	if keyErr != nil {
+		err = fmt.Errorf("generate certificate failed, %v", keyErr)
+		return
+	}
+
 	ips := make([]net.IP, 0, 1)
 	if config.IPs != nil {
 		for _, e := range config.IPs {
