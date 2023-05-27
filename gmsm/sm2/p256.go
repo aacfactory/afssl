@@ -6,62 +6,101 @@ import (
 	"sync"
 )
 
-type sm2P256Curve struct {
-	RInverse *big.Int
-	*elliptic.CurveParams
-	a, b, gx, gy sm2P256FieldElement
-}
-
-var initonce sync.Once
-var sm2P256 sm2P256Curve
-
-type sm2P256FieldElement [9]uint32
-type sm2P256LargeFieldElement [17]uint64
-
 const (
 	bottom28Bits = 0xFFFFFFF
 	bottom29Bits = 0x1FFFFFFF
 )
 
-func initP256Sm2() {
-	sm2P256.CurveParams = &elliptic.CurveParams{Name: "SM2-P-256"} // sm2
+func P256() elliptic.Curve {
+	initP256Once.Do(newP256)
+	return p256
+}
+
+var initP256Once sync.Once
+var p256 p256Curve
+
+type p256FieldElement [9]uint32
+type p256LargeFieldElement [17]uint64
+
+func newP256() {
+	p256.CurveParams = &elliptic.CurveParams{Name: "SM2-P-256"} // sm2
 	A, _ := new(big.Int).SetString("FFFFFFFEFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFF00000000FFFFFFFFFFFFFFFC", 16)
-	sm2P256.P, _ = new(big.Int).SetString("FFFFFFFEFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFF00000000FFFFFFFFFFFFFFFF", 16)
-	sm2P256.N, _ = new(big.Int).SetString("FFFFFFFEFFFFFFFFFFFFFFFFFFFFFFFF7203DF6B21C6052B53BBF40939D54123", 16)
-	sm2P256.B, _ = new(big.Int).SetString("28E9FA9E9D9F5E344D5A9E4BCF6509A7F39789F515AB8F92DDBCBD414D940E93", 16)
-	sm2P256.Gx, _ = new(big.Int).SetString("32C4AE2C1F1981195F9904466A39C9948FE30BBFF2660BE1715A4589334C74C7", 16)
-	sm2P256.Gy, _ = new(big.Int).SetString("BC3736A2F4F6779C59BDCEE36B692153D0A9877CC62A474002DF32E52139F0A0", 16)
-	sm2P256.RInverse, _ = new(big.Int).SetString("7ffffffd80000002fffffffe000000017ffffffe800000037ffffffc80000002", 16)
-	sm2P256.BitSize = 256
-	sm2P256FromBig(&sm2P256.a, A)
-	sm2P256FromBig(&sm2P256.gx, sm2P256.Gx)
-	sm2P256FromBig(&sm2P256.gy, sm2P256.Gy)
-	sm2P256FromBig(&sm2P256.b, sm2P256.B)
+	p256.P, _ = new(big.Int).SetString("FFFFFFFEFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFF00000000FFFFFFFFFFFFFFFF", 16)
+	p256.N, _ = new(big.Int).SetString("FFFFFFFEFFFFFFFFFFFFFFFFFFFFFFFF7203DF6B21C6052B53BBF40939D54123", 16)
+	p256.B, _ = new(big.Int).SetString("28E9FA9E9D9F5E344D5A9E4BCF6509A7F39789F515AB8F92DDBCBD414D940E93", 16)
+	p256.Gx, _ = new(big.Int).SetString("32C4AE2C1F1981195F9904466A39C9948FE30BBFF2660BE1715A4589334C74C7", 16)
+	p256.Gy, _ = new(big.Int).SetString("BC3736A2F4F6779C59BDCEE36B692153D0A9877CC62A474002DF32E52139F0A0", 16)
+	p256.RInverse, _ = new(big.Int).SetString("7ffffffd80000002fffffffe000000017ffffffe800000037ffffffc80000002", 16)
+	p256.BitSize = 256
+	p256FromBig(&p256.a, A)
+	p256FromBig(&p256.gx, p256.Gx)
+	p256FromBig(&p256.gy, p256.Gy)
+	p256FromBig(&p256.b, p256.B)
 }
 
-func P256Sm2() elliptic.Curve {
-	initonce.Do(initP256Sm2)
-	return sm2P256
+type p256Curve struct {
+	RInverse *big.Int
+	*elliptic.CurveParams
+	a, b, gx, gy p256FieldElement
 }
 
-func (curve sm2P256Curve) Params() *elliptic.CurveParams {
-	return sm2P256.CurveParams
+func (curve p256Curve) Params() *elliptic.CurveParams {
+	return curve.CurveParams
 }
 
-func (curve sm2P256Curve) IsOnCurve(X, Y *big.Int) bool {
-	var a, x, y, y2, x3 sm2P256FieldElement
+func (curve p256Curve) IsOnCurve(X, Y *big.Int) bool {
+	var a, x, y, y2, x3 p256FieldElement
+	p256FromBig(&x, X)
+	p256FromBig(&y, Y)
+	p256Square(&x3, &x)
+	p256Mul(&x3, &x3, &x)
+	p256Mul(&a, &curve.a, &x)
+	p256Add(&x3, &x3, &a)
+	p256Add(&x3, &x3, &curve.b)
+	p256Square(&y2, &y)
+	return p256ToBig(&x3).Cmp(p256ToBig(&y2)) == 0
+}
 
-	sm2P256FromBig(&x, X)
-	sm2P256FromBig(&y, Y)
+func (curve p256Curve) Add(x1, y1, x2, y2 *big.Int) (*big.Int, *big.Int) {
+	var X1, Y1, Z1, X2, Y2, Z2, X3, Y3, Z3 p256FieldElement
+	z1 := zForAffine(x1, y1)
+	z2 := zForAffine(x2, y2)
+	p256FromBig(&X1, x1)
+	p256FromBig(&Y1, y1)
+	p256FromBig(&Z1, z1)
+	p256FromBig(&X2, x2)
+	p256FromBig(&Y2, y2)
+	p256FromBig(&Z2, z2)
+	p256PointAdd(&X1, &Y1, &Z1, &X2, &Y2, &Z2, &X3, &Y3, &Z3)
+	return p256ToAffine(&X3, &Y3, &Z3)
+}
 
-	sm2P256Square(&x3, &x)
-	sm2P256Mul(&x3, &x3, &x)
-	sm2P256Mul(&a, &curve.a, &x)
-	sm2P256Add(&x3, &x3, &a)
-	sm2P256Add(&x3, &x3, &curve.b)
+func (curve p256Curve) Double(x1, y1 *big.Int) (*big.Int, *big.Int) {
+	var X1, Y1, Z1 p256FieldElement
+	z1 := zForAffine(x1, y1)
+	p256FromBig(&X1, x1)
+	p256FromBig(&Y1, y1)
+	p256FromBig(&Z1, z1)
+	p256PointDouble(&X1, &Y1, &Z1, &X1, &Y1, &Z1)
+	return p256ToAffine(&X1, &Y1, &Z1)
+}
 
-	sm2P256Square(&y2, &y)
-	return sm2P256ToBig(&x3).Cmp(sm2P256ToBig(&y2)) == 0
+func (curve p256Curve) ScalarMult(x1, y1 *big.Int, k []byte) (*big.Int, *big.Int) {
+	var X, Y, Z, X1, Y1 p256FieldElement
+	p256FromBig(&X1, x1)
+	p256FromBig(&Y1, y1)
+	scalar := generateWNaf(k)
+	scalarReversed := wNafReversed(scalar)
+	p256ScalarMult(&X, &Y, &Z, &X1, &Y1, scalarReversed)
+	return p256ToAffine(&X, &Y, &Z)
+}
+
+func (curve p256Curve) ScalarBaseMult(k []byte) (*big.Int, *big.Int) {
+	var scalarReversed [32]byte
+	var X, Y, Z p256FieldElement
+	p256GetScalar(&scalarReversed, k)
+	p256ScalarBaseMult(&X, &Y, &Z, &scalarReversed)
+	return p256ToAffine(&X, &Y, &Z)
 }
 
 func zForAffine(x, y *big.Int) *big.Int {
@@ -72,52 +111,7 @@ func zForAffine(x, y *big.Int) *big.Int {
 	return z
 }
 
-func (curve sm2P256Curve) Add(x1, y1, x2, y2 *big.Int) (*big.Int, *big.Int) {
-	var X1, Y1, Z1, X2, Y2, Z2, X3, Y3, Z3 sm2P256FieldElement
-
-	z1 := zForAffine(x1, y1)
-	z2 := zForAffine(x2, y2)
-	sm2P256FromBig(&X1, x1)
-	sm2P256FromBig(&Y1, y1)
-	sm2P256FromBig(&Z1, z1)
-	sm2P256FromBig(&X2, x2)
-	sm2P256FromBig(&Y2, y2)
-	sm2P256FromBig(&Z2, z2)
-	sm2P256PointAdd(&X1, &Y1, &Z1, &X2, &Y2, &Z2, &X3, &Y3, &Z3)
-	return sm2P256ToAffine(&X3, &Y3, &Z3)
-}
-
-func (curve sm2P256Curve) Double(x1, y1 *big.Int) (*big.Int, *big.Int) {
-	var X1, Y1, Z1 sm2P256FieldElement
-
-	z1 := zForAffine(x1, y1)
-	sm2P256FromBig(&X1, x1)
-	sm2P256FromBig(&Y1, y1)
-	sm2P256FromBig(&Z1, z1)
-	sm2P256PointDouble(&X1, &Y1, &Z1, &X1, &Y1, &Z1)
-	return sm2P256ToAffine(&X1, &Y1, &Z1)
-}
-
-func (curve sm2P256Curve) ScalarMult(x1, y1 *big.Int, k []byte) (*big.Int, *big.Int) {
-	var X, Y, Z, X1, Y1 sm2P256FieldElement
-	sm2P256FromBig(&X1, x1)
-	sm2P256FromBig(&Y1, y1)
-	scalar := sm2GenrateWNaf(k)
-	scalarReversed := WNafReversed(scalar)
-	sm2P256ScalarMult(&X, &Y, &Z, &X1, &Y1, scalarReversed)
-	return sm2P256ToAffine(&X, &Y, &Z)
-}
-
-func (curve sm2P256Curve) ScalarBaseMult(k []byte) (*big.Int, *big.Int) {
-	var scalarReversed [32]byte
-	var X, Y, Z sm2P256FieldElement
-
-	sm2P256GetScalar(&scalarReversed, k)
-	sm2P256ScalarBaseMult(&X, &Y, &Z, &scalarReversed)
-	return sm2P256ToAffine(&X, &Y, &Z)
-}
-
-var sm2P256Precomputed = [9 * 2 * 15 * 2]uint32{
+var p256Precomputed = [9 * 2 * 15 * 2]uint32{
 	0x830053d, 0x328990f, 0x6c04fe1, 0xc0f72e5, 0x1e19f3c, 0x666b093, 0x175a87b, 0xec38276, 0x222cf4b,
 	0x185a1bba, 0x354e593, 0x1295fac1, 0xf2bc469, 0x47c60fa, 0xc19b8a9, 0xf63533e, 0x903ae6b, 0xc79acba,
 	0x15b061a4, 0x33e020b, 0xdffb34b, 0xfcf2c8, 0x16582e08, 0x262f203, 0xfb34381, 0xa55452, 0x604f0ff,
@@ -180,12 +174,12 @@ var sm2P256Precomputed = [9 * 2 * 15 * 2]uint32{
 	0x11902a0, 0x6c29cc9, 0x1d5ffbe6, 0xdb0b4c7, 0x10144c14, 0x2f2b719, 0x301189, 0x2343336, 0xa0bf2ac,
 }
 
-func sm2P256GetScalar(b *[32]byte, a []byte) {
+func p256GetScalar(b *[32]byte, a []byte) {
 	var scalarBytes []byte
 
 	n := new(big.Int).SetBytes(a)
-	if n.Cmp(sm2P256.N) >= 0 {
-		n.Mod(n, sm2P256.N)
+	if n.Cmp(p256.N) >= 0 {
+		n.Mod(n, p256.N)
 		scalarBytes = n.Bytes()
 	} else {
 		scalarBytes = a
@@ -195,44 +189,44 @@ func sm2P256GetScalar(b *[32]byte, a []byte) {
 	}
 }
 
-func sm2P256PointAddMixed(xOut, yOut, zOut, x1, y1, z1, x2, y2 *sm2P256FieldElement) {
-	var z1z1, z1z1z1, s2, u2, h, i, j, r, rr, v, tmp sm2P256FieldElement
+func p256PointAddMixed(xOut, yOut, zOut, x1, y1, z1, x2, y2 *p256FieldElement) {
+	var z1z1, z1z1z1, s2, u2, h, i, j, r, rr, v, tmp p256FieldElement
 
-	sm2P256Square(&z1z1, z1)
-	sm2P256Add(&tmp, z1, z1)
+	p256Square(&z1z1, z1)
+	p256Add(&tmp, z1, z1)
 
-	sm2P256Mul(&u2, x2, &z1z1)
-	sm2P256Mul(&z1z1z1, z1, &z1z1)
-	sm2P256Mul(&s2, y2, &z1z1z1)
-	sm2P256Sub(&h, &u2, x1)
-	sm2P256Add(&i, &h, &h)
-	sm2P256Square(&i, &i)
-	sm2P256Mul(&j, &h, &i)
-	sm2P256Sub(&r, &s2, y1)
-	sm2P256Add(&r, &r, &r)
-	sm2P256Mul(&v, x1, &i)
+	p256Mul(&u2, x2, &z1z1)
+	p256Mul(&z1z1z1, z1, &z1z1)
+	p256Mul(&s2, y2, &z1z1z1)
+	p256Sub(&h, &u2, x1)
+	p256Add(&i, &h, &h)
+	p256Square(&i, &i)
+	p256Mul(&j, &h, &i)
+	p256Sub(&r, &s2, y1)
+	p256Add(&r, &r, &r)
+	p256Mul(&v, x1, &i)
 
-	sm2P256Mul(zOut, &tmp, &h)
-	sm2P256Square(&rr, &r)
-	sm2P256Sub(xOut, &rr, &j)
-	sm2P256Sub(xOut, xOut, &v)
-	sm2P256Sub(xOut, xOut, &v)
+	p256Mul(zOut, &tmp, &h)
+	p256Square(&rr, &r)
+	p256Sub(xOut, &rr, &j)
+	p256Sub(xOut, xOut, &v)
+	p256Sub(xOut, xOut, &v)
 
-	sm2P256Sub(&tmp, &v, xOut)
-	sm2P256Mul(yOut, &tmp, &r)
-	sm2P256Mul(&tmp, y1, &j)
-	sm2P256Sub(yOut, yOut, &tmp)
-	sm2P256Sub(yOut, yOut, &tmp)
+	p256Sub(&tmp, &v, xOut)
+	p256Mul(yOut, &tmp, &r)
+	p256Mul(&tmp, y1, &j)
+	p256Sub(yOut, yOut, &tmp)
+	p256Sub(yOut, yOut, &tmp)
 }
 
-func sm2P256CopyConditional(out, in *sm2P256FieldElement, mask uint32) {
+func p256CopyConditional(out, in *p256FieldElement, mask uint32) {
 	for i := 0; i < 9; i++ {
 		tmp := mask & (in[i] ^ out[i])
 		out[i] ^= tmp
 	}
 }
 
-func sm2P256SelectAffinePoint(xOut, yOut *sm2P256FieldElement, table []uint32, index uint32) {
+func p256SelectAffinePoint(xOut, yOut *p256FieldElement, table []uint32, index uint32) {
 	for i := range xOut {
 		xOut[i] = 0
 	}
@@ -257,7 +251,7 @@ func sm2P256SelectAffinePoint(xOut, yOut *sm2P256FieldElement, table []uint32, i
 	}
 }
 
-func sm2P256SelectJacobianPoint(xOut, yOut, zOut *sm2P256FieldElement, table *[16][3]sm2P256FieldElement, index uint32) {
+func p256SelectJacobianPoint(xOut, yOut, zOut *p256FieldElement, table *[16][3]p256FieldElement, index uint32) {
 	for i := range xOut {
 		xOut[i] = 0
 	}
@@ -286,13 +280,13 @@ func sm2P256SelectJacobianPoint(xOut, yOut, zOut *sm2P256FieldElement, table *[1
 	}
 }
 
-func sm2P256GetBit(scalar *[32]uint8, bit uint) uint32 {
+func p256GetBit(scalar *[32]uint8, bit uint) uint32 {
 	return uint32(((scalar[bit>>3]) >> (bit & 7)) & 1)
 }
 
-func sm2P256ScalarBaseMult(xOut, yOut, zOut *sm2P256FieldElement, scalar *[32]uint8) {
+func p256ScalarBaseMult(xOut, yOut, zOut *p256FieldElement, scalar *[32]uint8) {
 	nIsInfinityMask := ^uint32(0)
-	var px, py, tx, ty, tz sm2P256FieldElement
+	var px, py, tx, ty, tz p256FieldElement
 	var pIsNoninfiniteMask, mask, tableOffset uint32
 
 	for i := range xOut {
@@ -306,227 +300,227 @@ func sm2P256ScalarBaseMult(xOut, yOut, zOut *sm2P256FieldElement, scalar *[32]ui
 	}
 	for i := uint(0); i < 32; i++ {
 		if i != 0 {
-			sm2P256PointDouble(xOut, yOut, zOut, xOut, yOut, zOut)
+			p256PointDouble(xOut, yOut, zOut, xOut, yOut, zOut)
 		}
 		tableOffset = 0
 		for j := uint(0); j <= 32; j += 32 {
-			bit0 := sm2P256GetBit(scalar, 31-i+j)
-			bit1 := sm2P256GetBit(scalar, 95-i+j)
-			bit2 := sm2P256GetBit(scalar, 159-i+j)
-			bit3 := sm2P256GetBit(scalar, 223-i+j)
+			bit0 := p256GetBit(scalar, 31-i+j)
+			bit1 := p256GetBit(scalar, 95-i+j)
+			bit2 := p256GetBit(scalar, 159-i+j)
+			bit3 := p256GetBit(scalar, 223-i+j)
 			index := bit0 | (bit1 << 1) | (bit2 << 2) | (bit3 << 3)
-			sm2P256SelectAffinePoint(&px, &py, sm2P256Precomputed[tableOffset:], index)
+			p256SelectAffinePoint(&px, &py, p256Precomputed[tableOffset:], index)
 			tableOffset += 30 * 9
-			sm2P256PointAddMixed(&tx, &ty, &tz, xOut, yOut, zOut, &px, &py)
-			sm2P256CopyConditional(xOut, &px, nIsInfinityMask)
-			sm2P256CopyConditional(yOut, &py, nIsInfinityMask)
-			sm2P256CopyConditional(zOut, &sm2P256Factor[1], nIsInfinityMask)
+			p256PointAddMixed(&tx, &ty, &tz, xOut, yOut, zOut, &px, &py)
+			p256CopyConditional(xOut, &px, nIsInfinityMask)
+			p256CopyConditional(yOut, &py, nIsInfinityMask)
+			p256CopyConditional(zOut, &p256FieldElements[1], nIsInfinityMask)
 			pIsNoninfiniteMask = nonZeroToAllOnes(index)
 			mask = pIsNoninfiniteMask & ^nIsInfinityMask
-			sm2P256CopyConditional(xOut, &tx, mask)
-			sm2P256CopyConditional(yOut, &ty, mask)
-			sm2P256CopyConditional(zOut, &tz, mask)
+			p256CopyConditional(xOut, &tx, mask)
+			p256CopyConditional(yOut, &ty, mask)
+			p256CopyConditional(zOut, &tz, mask)
 			nIsInfinityMask &^= pIsNoninfiniteMask
 		}
 	}
 }
 
-func sm2P256PointToAffine(xOut, yOut, x, y, z *sm2P256FieldElement) {
-	var zInv, zInvSq sm2P256FieldElement
+func p256PointToAffine(xOut, yOut, x, y, z *p256FieldElement) {
+	var zInv, zInvSq p256FieldElement
 
-	zz := sm2P256ToBig(z)
-	zz.ModInverse(zz, sm2P256.P)
-	sm2P256FromBig(&zInv, zz)
+	zz := p256ToBig(z)
+	zz.ModInverse(zz, p256.P)
+	p256FromBig(&zInv, zz)
 
-	sm2P256Square(&zInvSq, &zInv)
-	sm2P256Mul(xOut, x, &zInvSq)
-	sm2P256Mul(&zInv, &zInv, &zInvSq)
-	sm2P256Mul(yOut, y, &zInv)
+	p256Square(&zInvSq, &zInv)
+	p256Mul(xOut, x, &zInvSq)
+	p256Mul(&zInv, &zInv, &zInvSq)
+	p256Mul(yOut, y, &zInv)
 }
 
-func sm2P256ToAffine(x, y, z *sm2P256FieldElement) (xOut, yOut *big.Int) {
-	var xx, yy sm2P256FieldElement
+func p256ToAffine(x, y, z *p256FieldElement) (xOut, yOut *big.Int) {
+	var xx, yy p256FieldElement
 
-	sm2P256PointToAffine(&xx, &yy, x, y, z)
-	return sm2P256ToBig(&xx), sm2P256ToBig(&yy)
+	p256PointToAffine(&xx, &yy, x, y, z)
+	return p256ToBig(&xx), p256ToBig(&yy)
 }
 
-var sm2P256Factor = []sm2P256FieldElement{
-	sm2P256FieldElement{0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0},
-	sm2P256FieldElement{0x2, 0x0, 0x1FFFFF00, 0x7FF, 0x0, 0x0, 0x0, 0x2000000, 0x0},
-	sm2P256FieldElement{0x4, 0x0, 0x1FFFFE00, 0xFFF, 0x0, 0x0, 0x0, 0x4000000, 0x0},
-	sm2P256FieldElement{0x6, 0x0, 0x1FFFFD00, 0x17FF, 0x0, 0x0, 0x0, 0x6000000, 0x0},
-	sm2P256FieldElement{0x8, 0x0, 0x1FFFFC00, 0x1FFF, 0x0, 0x0, 0x0, 0x8000000, 0x0},
-	sm2P256FieldElement{0xA, 0x0, 0x1FFFFB00, 0x27FF, 0x0, 0x0, 0x0, 0xA000000, 0x0},
-	sm2P256FieldElement{0xC, 0x0, 0x1FFFFA00, 0x2FFF, 0x0, 0x0, 0x0, 0xC000000, 0x0},
-	sm2P256FieldElement{0xE, 0x0, 0x1FFFF900, 0x37FF, 0x0, 0x0, 0x0, 0xE000000, 0x0},
-	sm2P256FieldElement{0x10, 0x0, 0x1FFFF800, 0x3FFF, 0x0, 0x0, 0x0, 0x0, 0x01},
+var p256FieldElements = []p256FieldElement{
+	p256FieldElement{0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0},
+	p256FieldElement{0x2, 0x0, 0x1FFFFF00, 0x7FF, 0x0, 0x0, 0x0, 0x2000000, 0x0},
+	p256FieldElement{0x4, 0x0, 0x1FFFFE00, 0xFFF, 0x0, 0x0, 0x0, 0x4000000, 0x0},
+	p256FieldElement{0x6, 0x0, 0x1FFFFD00, 0x17FF, 0x0, 0x0, 0x0, 0x6000000, 0x0},
+	p256FieldElement{0x8, 0x0, 0x1FFFFC00, 0x1FFF, 0x0, 0x0, 0x0, 0x8000000, 0x0},
+	p256FieldElement{0xA, 0x0, 0x1FFFFB00, 0x27FF, 0x0, 0x0, 0x0, 0xA000000, 0x0},
+	p256FieldElement{0xC, 0x0, 0x1FFFFA00, 0x2FFF, 0x0, 0x0, 0x0, 0xC000000, 0x0},
+	p256FieldElement{0xE, 0x0, 0x1FFFF900, 0x37FF, 0x0, 0x0, 0x0, 0xE000000, 0x0},
+	p256FieldElement{0x10, 0x0, 0x1FFFF800, 0x3FFF, 0x0, 0x0, 0x0, 0x0, 0x01},
 }
 
-func sm2P256Scalar(b *sm2P256FieldElement, a int) {
-	sm2P256Mul(b, b, &sm2P256Factor[a])
+func p256Scalar(b *p256FieldElement, a int) {
+	p256Mul(b, b, &p256FieldElements[a])
 }
 
-func sm2P256PointAdd(x1, y1, z1, x2, y2, z2, x3, y3, z3 *sm2P256FieldElement) {
-	var u1, u2, z22, z12, z23, z13, s1, s2, h, h2, r, r2, tm sm2P256FieldElement
+func p256PointAdd(x1, y1, z1, x2, y2, z2, x3, y3, z3 *p256FieldElement) {
+	var u1, u2, z22, z12, z23, z13, s1, s2, h, h2, r, r2, tm p256FieldElement
 
-	if sm2P256ToBig(z1).Sign() == 0 {
-		sm2P256Dup(x3, x2)
-		sm2P256Dup(y3, y2)
-		sm2P256Dup(z3, z2)
+	if p256ToBig(z1).Sign() == 0 {
+		p256Dup(x3, x2)
+		p256Dup(y3, y2)
+		p256Dup(z3, z2)
 		return
 	}
 
-	if sm2P256ToBig(z2).Sign() == 0 {
-		sm2P256Dup(x3, x1)
-		sm2P256Dup(y3, y1)
-		sm2P256Dup(z3, z1)
+	if p256ToBig(z2).Sign() == 0 {
+		p256Dup(x3, x1)
+		p256Dup(y3, y1)
+		p256Dup(z3, z1)
 		return
 	}
 
-	sm2P256Square(&z12, z1)
-	sm2P256Square(&z22, z2)
+	p256Square(&z12, z1)
+	p256Square(&z22, z2)
 
-	sm2P256Mul(&z13, &z12, z1)
-	sm2P256Mul(&z23, &z22, z2)
+	p256Mul(&z13, &z12, z1)
+	p256Mul(&z23, &z22, z2)
 
-	sm2P256Mul(&u1, x1, &z22)
-	sm2P256Mul(&u2, x2, &z12)
+	p256Mul(&u1, x1, &z22)
+	p256Mul(&u2, x2, &z12)
 
-	sm2P256Mul(&s1, y1, &z23)
-	sm2P256Mul(&s2, y2, &z13)
+	p256Mul(&s1, y1, &z23)
+	p256Mul(&s2, y2, &z13)
 
-	if sm2P256ToBig(&u1).Cmp(sm2P256ToBig(&u2)) == 0 &&
-		sm2P256ToBig(&s1).Cmp(sm2P256ToBig(&s2)) == 0 {
-		sm2P256PointDouble(x1, y1, z1, x1, y1, z1)
+	if p256ToBig(&u1).Cmp(p256ToBig(&u2)) == 0 &&
+		p256ToBig(&s1).Cmp(p256ToBig(&s2)) == 0 {
+		p256PointDouble(x1, y1, z1, x1, y1, z1)
 	}
 
-	sm2P256Sub(&h, &u2, &u1)
-	sm2P256Sub(&r, &s2, &s1)
+	p256Sub(&h, &u2, &u1)
+	p256Sub(&r, &s2, &s1)
 
-	sm2P256Square(&r2, &r)
-	sm2P256Square(&h2, &h)
+	p256Square(&r2, &r)
+	p256Square(&h2, &h)
 
-	sm2P256Mul(&tm, &h2, &h)
-	sm2P256Sub(x3, &r2, &tm)
-	sm2P256Mul(&tm, &u1, &h2)
-	sm2P256Scalar(&tm, 2)
-	sm2P256Sub(x3, x3, &tm)
+	p256Mul(&tm, &h2, &h)
+	p256Sub(x3, &r2, &tm)
+	p256Mul(&tm, &u1, &h2)
+	p256Scalar(&tm, 2)
+	p256Sub(x3, x3, &tm)
 
-	sm2P256Mul(&tm, &u1, &h2)
-	sm2P256Sub(&tm, &tm, x3)
-	sm2P256Mul(y3, &r, &tm)
-	sm2P256Mul(&tm, &h2, &h)
-	sm2P256Mul(&tm, &tm, &s1)
-	sm2P256Sub(y3, y3, &tm)
+	p256Mul(&tm, &u1, &h2)
+	p256Sub(&tm, &tm, x3)
+	p256Mul(y3, &r, &tm)
+	p256Mul(&tm, &h2, &h)
+	p256Mul(&tm, &tm, &s1)
+	p256Sub(y3, y3, &tm)
 
-	sm2P256Mul(z3, z1, z2)
-	sm2P256Mul(z3, z3, &h)
+	p256Mul(z3, z1, z2)
+	p256Mul(z3, z3, &h)
 }
 
-func sm2P256PointSub(x1, y1, z1, x2, y2, z2, x3, y3, z3 *sm2P256FieldElement) {
-	var u1, u2, z22, z12, z23, z13, s1, s2, h, h2, r, r2, tm sm2P256FieldElement
-	y := sm2P256ToBig(y2)
+func p256PointSub(x1, y1, z1, x2, y2, z2, x3, y3, z3 *p256FieldElement) {
+	var u1, u2, z22, z12, z23, z13, s1, s2, h, h2, r, r2, tm p256FieldElement
+	y := p256ToBig(y2)
 	zero := new(big.Int).SetInt64(0)
 	y.Sub(zero, y)
-	sm2P256FromBig(y2, y)
+	p256FromBig(y2, y)
 
-	if sm2P256ToBig(z1).Sign() == 0 {
-		sm2P256Dup(x3, x2)
-		sm2P256Dup(y3, y2)
-		sm2P256Dup(z3, z2)
+	if p256ToBig(z1).Sign() == 0 {
+		p256Dup(x3, x2)
+		p256Dup(y3, y2)
+		p256Dup(z3, z2)
 		return
 	}
 
-	if sm2P256ToBig(z2).Sign() == 0 {
-		sm2P256Dup(x3, x1)
-		sm2P256Dup(y3, y1)
-		sm2P256Dup(z3, z1)
+	if p256ToBig(z2).Sign() == 0 {
+		p256Dup(x3, x1)
+		p256Dup(y3, y1)
+		p256Dup(z3, z1)
 		return
 	}
 
-	sm2P256Square(&z12, z1)
-	sm2P256Square(&z22, z2)
+	p256Square(&z12, z1)
+	p256Square(&z22, z2)
 
-	sm2P256Mul(&z13, &z12, z1)
-	sm2P256Mul(&z23, &z22, z2)
+	p256Mul(&z13, &z12, z1)
+	p256Mul(&z23, &z22, z2)
 
-	sm2P256Mul(&u1, x1, &z22)
-	sm2P256Mul(&u2, x2, &z12)
+	p256Mul(&u1, x1, &z22)
+	p256Mul(&u2, x2, &z12)
 
-	sm2P256Mul(&s1, y1, &z23)
-	sm2P256Mul(&s2, y2, &z13)
+	p256Mul(&s1, y1, &z23)
+	p256Mul(&s2, y2, &z13)
 
-	if sm2P256ToBig(&u1).Cmp(sm2P256ToBig(&u2)) == 0 &&
-		sm2P256ToBig(&s1).Cmp(sm2P256ToBig(&s2)) == 0 {
-		sm2P256PointDouble(x1, y1, z1, x1, y1, z1)
+	if p256ToBig(&u1).Cmp(p256ToBig(&u2)) == 0 &&
+		p256ToBig(&s1).Cmp(p256ToBig(&s2)) == 0 {
+		p256PointDouble(x1, y1, z1, x1, y1, z1)
 	}
 
-	sm2P256Sub(&h, &u2, &u1)
-	sm2P256Sub(&r, &s2, &s1)
+	p256Sub(&h, &u2, &u1)
+	p256Sub(&r, &s2, &s1)
 
-	sm2P256Square(&r2, &r)
-	sm2P256Square(&h2, &h)
+	p256Square(&r2, &r)
+	p256Square(&h2, &h)
 
-	sm2P256Mul(&tm, &h2, &h)
-	sm2P256Sub(x3, &r2, &tm)
-	sm2P256Mul(&tm, &u1, &h2)
-	sm2P256Scalar(&tm, 2)
-	sm2P256Sub(x3, x3, &tm)
+	p256Mul(&tm, &h2, &h)
+	p256Sub(x3, &r2, &tm)
+	p256Mul(&tm, &u1, &h2)
+	p256Scalar(&tm, 2)
+	p256Sub(x3, x3, &tm)
 
-	sm2P256Mul(&tm, &u1, &h2)
-	sm2P256Sub(&tm, &tm, x3)
-	sm2P256Mul(y3, &r, &tm)
-	sm2P256Mul(&tm, &h2, &h)
-	sm2P256Mul(&tm, &tm, &s1)
-	sm2P256Sub(y3, y3, &tm)
+	p256Mul(&tm, &u1, &h2)
+	p256Sub(&tm, &tm, x3)
+	p256Mul(y3, &r, &tm)
+	p256Mul(&tm, &h2, &h)
+	p256Mul(&tm, &tm, &s1)
+	p256Sub(y3, y3, &tm)
 
-	sm2P256Mul(z3, z1, z2)
-	sm2P256Mul(z3, z3, &h)
+	p256Mul(z3, z1, z2)
+	p256Mul(z3, z3, &h)
 }
 
-func sm2P256PointDouble(x3, y3, z3, x, y, z *sm2P256FieldElement) {
-	var s, m, m2, x2, y2, z2, z4, y4, az4 sm2P256FieldElement
+func p256PointDouble(x3, y3, z3, x, y, z *p256FieldElement) {
+	var s, m, m2, x2, y2, z2, z4, y4, az4 p256FieldElement
 
-	sm2P256Square(&x2, x)
-	sm2P256Square(&y2, y)
-	sm2P256Square(&z2, z)
+	p256Square(&x2, x)
+	p256Square(&y2, y)
+	p256Square(&z2, z)
 
-	sm2P256Square(&z4, z)
-	sm2P256Mul(&z4, &z4, z)
-	sm2P256Mul(&z4, &z4, z)
+	p256Square(&z4, z)
+	p256Mul(&z4, &z4, z)
+	p256Mul(&z4, &z4, z)
 
-	sm2P256Square(&y4, y)
-	sm2P256Mul(&y4, &y4, y)
-	sm2P256Mul(&y4, &y4, y)
-	sm2P256Scalar(&y4, 8)
+	p256Square(&y4, y)
+	p256Mul(&y4, &y4, y)
+	p256Mul(&y4, &y4, y)
+	p256Scalar(&y4, 8)
 
-	sm2P256Mul(&s, x, &y2)
-	sm2P256Scalar(&s, 4)
+	p256Mul(&s, x, &y2)
+	p256Scalar(&s, 4)
 
-	sm2P256Dup(&m, &x2)
-	sm2P256Scalar(&m, 3)
-	sm2P256Mul(&az4, &sm2P256.a, &z4)
-	sm2P256Add(&m, &m, &az4)
+	p256Dup(&m, &x2)
+	p256Scalar(&m, 3)
+	p256Mul(&az4, &p256.a, &z4)
+	p256Add(&m, &m, &az4)
 
-	sm2P256Square(&m2, &m)
+	p256Square(&m2, &m)
 
-	sm2P256Add(z3, y, z)
-	sm2P256Square(z3, z3)
-	sm2P256Sub(z3, z3, &z2)
-	sm2P256Sub(z3, z3, &y2)
+	p256Add(z3, y, z)
+	p256Square(z3, z3)
+	p256Sub(z3, z3, &z2)
+	p256Sub(z3, z3, &y2)
 
-	sm2P256Sub(x3, &m2, &s)
-	sm2P256Sub(x3, x3, &s)
+	p256Sub(x3, &m2, &s)
+	p256Sub(x3, x3, &s)
 
-	sm2P256Sub(y3, &s, x3)
-	sm2P256Mul(y3, y3, &m)
-	sm2P256Sub(y3, y3, &y4)
+	p256Sub(y3, &s, x3)
+	p256Mul(y3, y3, &m)
+	p256Sub(y3, y3, &y4)
 }
 
-var sm2P256Zero31 = sm2P256FieldElement{0x7FFFFFF8, 0x3FFFFFFC, 0x800003FC, 0x3FFFDFFC, 0x7FFFFFFC, 0x3FFFFFFC, 0x7FFFFFFC, 0x37FFFFFC, 0x7FFFFFFC}
+var p256Zero31 = p256FieldElement{0x7FFFFFF8, 0x3FFFFFFC, 0x800003FC, 0x3FFFDFFC, 0x7FFFFFFC, 0x3FFFFFFC, 0x7FFFFFFC, 0x37FFFFFC, 0x7FFFFFFC}
 
-func sm2P256Add(c, a, b *sm2P256FieldElement) {
+func p256Add(c, a, b *p256FieldElement) {
 	carry := uint32(0)
 	for i := 0; ; i++ {
 		c[i] = a[i] + b[i]
@@ -542,15 +536,15 @@ func sm2P256Add(c, a, b *sm2P256FieldElement) {
 		carry = c[i] >> 28
 		c[i] &= bottom28Bits
 	}
-	sm2P256ReduceCarry(c, carry)
+	p256ReduceCarry(c, carry)
 }
 
-func sm2P256Sub(c, a, b *sm2P256FieldElement) {
+func p256Sub(c, a, b *p256FieldElement) {
 	var carry uint32
 
 	for i := 0; ; i++ {
 		c[i] = a[i] - b[i]
-		c[i] += sm2P256Zero31[i]
+		c[i] += p256Zero31[i]
 		c[i] += carry
 		carry = c[i] >> 29
 		c[i] &= bottom29Bits
@@ -559,16 +553,16 @@ func sm2P256Sub(c, a, b *sm2P256FieldElement) {
 			break
 		}
 		c[i] = a[i] - b[i]
-		c[i] += sm2P256Zero31[i]
+		c[i] += p256Zero31[i]
 		c[i] += carry
 		carry = c[i] >> 28
 		c[i] &= bottom28Bits
 	}
-	sm2P256ReduceCarry(c, carry)
+	p256ReduceCarry(c, carry)
 }
 
-func sm2P256Mul(c, a, b *sm2P256FieldElement) {
-	var tmp sm2P256LargeFieldElement
+func p256Mul(c, a, b *p256FieldElement) {
+	var tmp p256LargeFieldElement
 
 	tmp[0] = uint64(a[0]) * uint64(b[0])
 	tmp[1] = uint64(a[0])*(uint64(b[1])<<0) +
@@ -651,11 +645,11 @@ func sm2P256Mul(c, a, b *sm2P256FieldElement) {
 	tmp[15] = uint64(a[7])*(uint64(b[8])<<0) +
 		uint64(a[8])*(uint64(b[7])<<0)
 	tmp[16] = uint64(a[8]) * (uint64(b[8]) << 0)
-	sm2P256ReduceDegree(c, &tmp)
+	p256ReduceDegree(c, &tmp)
 }
 
-func sm2P256Square(b, a *sm2P256FieldElement) {
-	var tmp sm2P256LargeFieldElement
+func p256Square(b, a *p256FieldElement) {
+	var tmp p256LargeFieldElement
 
 	tmp[0] = uint64(a[0]) * uint64(a[0])
 	tmp[1] = uint64(a[0]) * (uint64(a[1]) << 1)
@@ -702,14 +696,14 @@ func sm2P256Square(b, a *sm2P256FieldElement) {
 		uint64(a[7])*(uint64(a[7])<<1)
 	tmp[15] = uint64(a[7]) * (uint64(a[8]) << 1)
 	tmp[16] = uint64(a[8]) * uint64(a[8])
-	sm2P256ReduceDegree(b, &tmp)
+	p256ReduceDegree(b, &tmp)
 }
 
 func nonZeroToAllOnes(x uint32) uint32 {
 	return ((x - 1) >> 31) - 1
 }
 
-var sm2P256Carry = [8 * 9]uint32{
+var p256Carry = [8 * 9]uint32{
 	0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0,
 	0x2, 0x0, 0x1FFFFF00, 0x7FF, 0x0, 0x0, 0x0, 0x2000000, 0x0,
 	0x4, 0x0, 0x1FFFFE00, 0xFFF, 0x0, 0x0, 0x0, 0x4000000, 0x0,
@@ -720,14 +714,14 @@ var sm2P256Carry = [8 * 9]uint32{
 	0xE, 0x0, 0x1FFFF900, 0x37FF, 0x0, 0x0, 0x0, 0xE000000, 0x0,
 }
 
-func sm2P256ReduceCarry(a *sm2P256FieldElement, carry uint32) {
-	a[0] += sm2P256Carry[carry*9+0]
-	a[2] += sm2P256Carry[carry*9+2]
-	a[3] += sm2P256Carry[carry*9+3]
-	a[7] += sm2P256Carry[carry*9+7]
+func p256ReduceCarry(a *p256FieldElement, carry uint32) {
+	a[0] += p256Carry[carry*9+0]
+	a[2] += p256Carry[carry*9+2]
+	a[3] += p256Carry[carry*9+3]
+	a[7] += p256Carry[carry*9+7]
 }
 
-func sm2P256ReduceDegree(a *sm2P256FieldElement, b *sm2P256LargeFieldElement) {
+func p256ReduceDegree(a *p256FieldElement, b *p256LargeFieldElement) {
 	var tmp [18]uint32
 	var carry, x, xMask uint32
 
@@ -915,16 +909,16 @@ func sm2P256ReduceDegree(a *sm2P256FieldElement, b *sm2P256LargeFieldElement) {
 	a[8] += carry
 	carry = a[8] >> 29
 	a[8] &= bottom29Bits
-	sm2P256ReduceCarry(a, carry)
+	p256ReduceCarry(a, carry)
 }
 
-func sm2P256Dup(b, a *sm2P256FieldElement) {
+func p256Dup(b, a *p256FieldElement) {
 	*b = *a
 }
 
-func sm2P256FromBig(X *sm2P256FieldElement, a *big.Int) {
+func p256FromBig(X *p256FieldElement, a *big.Int) {
 	x := new(big.Int).Lsh(a, 257)
-	x.Mod(x, sm2P256.P)
+	x.Mod(x, p256.P)
 	for i := 0; i < 9; i++ {
 		if bits := x.Bits(); len(bits) > 0 {
 			X[i] = uint32(bits[0]) & bottom29Bits
@@ -945,7 +939,7 @@ func sm2P256FromBig(X *sm2P256FieldElement, a *big.Int) {
 	}
 }
 
-func sm2P256ToBig(X *sm2P256FieldElement) *big.Int {
+func p256ToBig(X *p256FieldElement) *big.Int {
 	r, tm := new(big.Int), new(big.Int)
 	r.SetInt64(int64(X[8]))
 	for i := 7; i >= 0; i-- {
@@ -957,12 +951,12 @@ func sm2P256ToBig(X *sm2P256FieldElement) *big.Int {
 		tm.SetInt64(int64(X[i]))
 		r.Add(r, tm)
 	}
-	r.Mul(r, sm2P256.RInverse)
-	r.Mod(r, sm2P256.P)
+	r.Mul(r, p256.RInverse)
+	r.Mod(r, p256.P)
 	return r
 }
 
-func WNafReversed(wnaf []int8) []int8 {
+func wNafReversed(wnaf []int8) []int8 {
 	wnafRev := make([]int8, len(wnaf), len(wnaf))
 	for i, v := range wnaf {
 		wnafRev[len(wnaf)-(1+i)] = v
@@ -970,11 +964,11 @@ func WNafReversed(wnaf []int8) []int8 {
 	return wnafRev
 }
 
-func sm2GenrateWNaf(b []byte) []int8 {
+func generateWNaf(b []byte) []int8 {
 	n := new(big.Int).SetBytes(b)
 	var k *big.Int
-	if n.Cmp(sm2P256.N) >= 0 {
-		n.Mod(n, sm2P256.N)
+	if n.Cmp(p256.N) >= 0 {
+		n.Mod(n, p256.N)
 		k = n
 	} else {
 		k = n
@@ -1029,18 +1023,18 @@ func abs(a int8) uint32 {
 	return uint32(a)
 }
 
-func sm2P256ScalarMult(xOut, yOut, zOut, x, y *sm2P256FieldElement, scalar []int8) {
-	var precomp [16][3]sm2P256FieldElement
-	var px, py, pz, tx, ty, tz sm2P256FieldElement
+func p256ScalarMult(xOut, yOut, zOut, x, y *p256FieldElement, scalar []int8) {
+	var precomp [16][3]p256FieldElement
+	var px, py, pz, tx, ty, tz p256FieldElement
 	var nIsInfinityMask, index, pIsNonInfiniteMask, mask uint32
 
 	precomp[1][0] = *x
 	precomp[1][1] = *y
-	precomp[1][2] = sm2P256Factor[1]
+	precomp[1][2] = p256FieldElements[1]
 
 	for i := 2; i < 8; i += 2 {
-		sm2P256PointDouble(&precomp[i][0], &precomp[i][1], &precomp[i][2], &precomp[i/2][0], &precomp[i/2][1], &precomp[i/2][2])
-		sm2P256PointAddMixed(&precomp[i+1][0], &precomp[i+1][1], &precomp[i+1][2], &precomp[i][0], &precomp[i][1], &precomp[i][2], x, y)
+		p256PointDouble(&precomp[i][0], &precomp[i][1], &precomp[i][2], &precomp[i/2][0], &precomp[i/2][1], &precomp[i/2][2])
+		p256PointAddMixed(&precomp[i+1][0], &precomp[i+1][1], &precomp[i+1][2], &precomp[i][0], &precomp[i][1], &precomp[i][2], x, y)
 	}
 
 	for i := range xOut {
@@ -1061,30 +1055,30 @@ func sm2P256ScalarMult(xOut, yOut, zOut, x, y *sm2P256FieldElement, scalar []int
 		}
 		if zeroes > 0 {
 			for ; zeroes > 0; zeroes-- {
-				sm2P256PointDouble(xOut, yOut, zOut, xOut, yOut, zOut)
+				p256PointDouble(xOut, yOut, zOut, xOut, yOut, zOut)
 			}
 		}
 		index = abs(scalar[i])
-		sm2P256PointDouble(xOut, yOut, zOut, xOut, yOut, zOut)
-		sm2P256SelectJacobianPoint(&px, &py, &pz, &precomp, index)
+		p256PointDouble(xOut, yOut, zOut, xOut, yOut, zOut)
+		p256SelectJacobianPoint(&px, &py, &pz, &precomp, index)
 		if scalar[i] > 0 {
-			sm2P256PointAdd(xOut, yOut, zOut, &px, &py, &pz, &tx, &ty, &tz)
+			p256PointAdd(xOut, yOut, zOut, &px, &py, &pz, &tx, &ty, &tz)
 		} else {
-			sm2P256PointSub(xOut, yOut, zOut, &px, &py, &pz, &tx, &ty, &tz)
+			p256PointSub(xOut, yOut, zOut, &px, &py, &pz, &tx, &ty, &tz)
 		}
-		sm2P256CopyConditional(xOut, &px, nIsInfinityMask)
-		sm2P256CopyConditional(yOut, &py, nIsInfinityMask)
-		sm2P256CopyConditional(zOut, &pz, nIsInfinityMask)
+		p256CopyConditional(xOut, &px, nIsInfinityMask)
+		p256CopyConditional(yOut, &py, nIsInfinityMask)
+		p256CopyConditional(zOut, &pz, nIsInfinityMask)
 		pIsNonInfiniteMask = nonZeroToAllOnes(index)
 		mask = pIsNonInfiniteMask & ^nIsInfinityMask
-		sm2P256CopyConditional(xOut, &tx, mask)
-		sm2P256CopyConditional(yOut, &ty, mask)
-		sm2P256CopyConditional(zOut, &tz, mask)
+		p256CopyConditional(xOut, &tx, mask)
+		p256CopyConditional(yOut, &ty, mask)
+		p256CopyConditional(zOut, &tz, mask)
 		nIsInfinityMask &^= pIsNonInfiniteMask
 	}
 	if zeroes > 0 {
 		for ; zeroes > 0; zeroes-- {
-			sm2P256PointDouble(xOut, yOut, zOut, xOut, yOut, zOut)
+			p256PointDouble(xOut, yOut, zOut, xOut, yOut, zOut)
 		}
 	}
 }

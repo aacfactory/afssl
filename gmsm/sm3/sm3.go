@@ -212,7 +212,7 @@ func (sm3 *SM3) Sum(in []byte) []byte {
 	return out
 }
 
-func Sm3Sum(data []byte) []byte {
+func Sum(data []byte) []byte {
 	var sm3 SM3
 	sm3.Reset()
 	_, _ = sm3.Write(data)
