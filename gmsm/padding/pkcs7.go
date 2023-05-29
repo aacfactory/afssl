@@ -1,0 +1,38 @@
+package padding
+
+import (
+	"errors"
+	"github.com/aacfactory/afssl/gmsm/internal/alias"
+)
+
+type pkcs7Padding uint
+
+func (pad pkcs7Padding) BlockSize() int {
+	return int(pad)
+}
+
+func (pad pkcs7Padding) Pad(src []byte) []byte {
+	overhead := pad.BlockSize() - len(src)%pad.BlockSize()
+	ret, out := alias.SliceForAppend(src, overhead)
+	for i := 0; i < overhead; i++ {
+		out[i] = byte(overhead)
+	}
+	return ret
+}
+
+func (pad pkcs7Padding) Unpad(src []byte) ([]byte, error) {
+	srcLen := len(src)
+	if srcLen == 0 || srcLen%pad.BlockSize() != 0 {
+		return nil, errors.New("pkcs7: src length is not multiple of block size")
+	}
+	paddedLen := src[srcLen-1]
+	if paddedLen == 0 || int(paddedLen) > pad.BlockSize() {
+		return nil, errors.New("pkcs7: invalid padding byte/length")
+	}
+	for _, b := range src[srcLen-int(paddedLen) : srcLen-1] {
+		if b != paddedLen {
+			return nil, errors.New("pkcs7: inconsistent padding bytes")
+		}
+	}
+	return src[:srcLen-int(paddedLen)], nil
+}
