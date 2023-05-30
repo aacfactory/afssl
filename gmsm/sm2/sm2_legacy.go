@@ -265,7 +265,7 @@ func ASN1Ciphertext2Plain(ciphertext []byte, opts *EncryptorOpts) ([]byte, error
 	if opts == nil {
 		opts = defaultEncryptorOpts
 	}
-	x1, y1, c2, c3, err := unmarshalASN1Ciphertext((ciphertext))
+	x1, y1, c2, c3, err := unmarshalASN1Ciphertext(ciphertext)
 	if err != nil {
 		return nil, err
 	}
