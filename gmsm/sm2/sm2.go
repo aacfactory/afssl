@@ -4,13 +4,13 @@ import (
 	"crypto"
 	"crypto/aes"
 	"crypto/cipher"
-	"crypto/ecdh"
 	"crypto/ecdsa"
 	"crypto/elliptic"
 	"crypto/sha512"
 	"crypto/subtle"
 	"errors"
 	"fmt"
+	"github.com/aacfactory/afssl/gmsm/ecdh"
 	"io"
 	"math/big"
 	"sync"
@@ -166,7 +166,6 @@ func EncryptASN1(random io.Reader, pub *ecdsa.PublicKey, msg []byte) ([]byte, er
 }
 
 func Encrypt(random io.Reader, pub *ecdsa.PublicKey, msg []byte, opts *EncryptorOpts) ([]byte, error) {
-	//A3, requirement is to check if h*P is infinite point, h is 1
 	if pub.X.Sign() == 0 && pub.Y.Sign() == 0 {
 		return nil, errors.New("sm2: public key point is the infinity")
 	}
@@ -308,7 +307,6 @@ func decryptSM2EC(c *sm2Curve, priv *PrivateKey, ciphertext []byte, opts *Decryp
 		return nil, ErrDecryption
 	}
 
-	//B5, calculate msg = c2 ^ t
 	subtle.XORBytes(msg, c2, msg)
 
 	md := sm3.New()
@@ -652,10 +650,10 @@ func mixedCSPRNG(rand io.Reader, priv *ecdsa.PrivateKey, hash []byte) (io.Reader
 	}
 
 	md := sha512.New()
-	md.Write(priv.D.Bytes()) // the private key,
-	md.Write(entropy)        // the entropy,
-	md.Write(hash)           // and the input hash;
-	key := md.Sum(nil)[:32]  // and compute ChopMD-256(SHA-512),
+	md.Write(priv.D.Bytes())
+	md.Write(entropy)
+	md.Write(hash)
+	key := md.Sum(nil)[:32]
 
 	block, err := aes.NewCipher(key)
 	if err != nil {
@@ -689,7 +687,6 @@ func P256() elliptic.Curve {
 	return sm2ec.P256()
 }
 
-// todo remove when not used
 func PublicKeyToECDH(k *ecdsa.PublicKey) (*ecdh.PublicKey, error) {
 	c := curveToECDH(k.Curve)
 	if c == nil {
@@ -701,7 +698,6 @@ func PublicKeyToECDH(k *ecdsa.PublicKey) (*ecdh.PublicKey, error) {
 	return c.NewPublicKey(elliptic.Marshal(k.Curve, k.X, k.Y))
 }
 
-// todo remove when not used
 func (pri *PrivateKey) ECDH() (*ecdh.PrivateKey, error) {
 	c := curveToECDH(pri.Curve)
 	if c == nil {

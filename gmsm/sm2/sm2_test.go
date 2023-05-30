@@ -27,6 +27,10 @@ func TestSM2(t *testing.T) {
 	}
 	fmt.Println(string(b))
 
+	_, epkErr := sm2.PublicKeyToECDH(pub)
+	if epkErr != nil {
+		t.Fatal(epkErr)
+	}
 }
 
 func TestNewKeyExchange(t *testing.T) {
@@ -58,12 +62,12 @@ func TestNewKeyExchange(t *testing.T) {
 		responder.Destroy()
 	}()
 
-	rA, rAErr := initiator.InitKeyExchange(rand.Reader)
+	rA, rAErr := initiator.InitiatorKeyExchange(rand.Reader)
 	if rAErr != nil {
 		t.Fatal(rAErr)
 	}
 
-	rB, s2, rBErr := responder.RepondKeyExchange(rand.Reader, rA)
+	rB, s2, rBErr := responder.ResponderKeyExchange(rand.Reader, rA)
 	if rBErr != nil {
 		t.Fatal(rBErr)
 	}
