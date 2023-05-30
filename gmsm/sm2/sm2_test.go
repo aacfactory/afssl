@@ -62,12 +62,12 @@ func TestNewKeyExchange(t *testing.T) {
 		responder.Destroy()
 	}()
 
-	rA, rAErr := initiator.InitiatorKeyExchange(rand.Reader)
+	rA, rAErr := initiator.Init(rand.Reader)
 	if rAErr != nil {
 		t.Fatal(rAErr)
 	}
 
-	rB, s2, rBErr := responder.ResponderKeyExchange(rand.Reader, rA)
+	rB, s2, rBErr := responder.Respond(rand.Reader, rA)
 	if rBErr != nil {
 		t.Fatal(rBErr)
 	}

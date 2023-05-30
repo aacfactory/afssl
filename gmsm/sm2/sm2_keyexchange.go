@@ -15,11 +15,11 @@ import (
 // Usage:
 // 1. initiator create key exchanging
 // 1.1. initiator, err := sm2.NewKeyExchange(initiatorPRI, responderPUB, initiatorUID, responderUID, kenLen, true)
-// 2.1. rA, rAErr := initiator.InitiatorKeyExchange(rand.Reader)
+// 2.1. rA, rAErr := initiator.Init(rand.Reader)
 // 2.3. send rA to responder
 // 2. responder create key exchanging
 // 2.1. responder, err := sm2.NewKeyExchange(responderPRI, initiatorPUB, responderUID, initiatorUID, kenLen, true)
-// 2.2. rB, s2, rBErr := responder.ResponderKeyExchange(rand.Reader, rA)
+// 2.2. rB, s2, rBErr := responder.Respond(rand.Reader, rA)
 // 2.3. send rB and s2 to initiator
 // 3. initiator confirm
 // 3.1 ss, s1, err := initiator.ConfirmResponder(rB, s2)
@@ -135,7 +135,7 @@ func initKeyExchange(ke *KeyExchange, r *big.Int) {
 	ke.r = r
 }
 
-func (ke *KeyExchange) InitiatorKeyExchange(rand io.Reader) (*ecdsa.PublicKey, error) {
+func (ke *KeyExchange) Init(rand io.Reader) (*ecdsa.PublicKey, error) {
 	r, err := randFieldElement(ke.privateKey, rand)
 	if err != nil {
 		return nil, err
@@ -228,7 +228,7 @@ func respondKeyExchange(ke *KeyExchange, rA *ecdsa.PublicKey, r *big.Int) (*ecds
 	return ke.secret, ke.sign(true, 0x02), nil
 }
 
-func (ke *KeyExchange) ResponderKeyExchange(rand io.Reader, rA *ecdsa.PublicKey) (*ecdsa.PublicKey, []byte, error) {
+func (ke *KeyExchange) Respond(rand io.Reader, rA *ecdsa.PublicKey) (*ecdsa.PublicKey, []byte, error) {
 	r, err := randFieldElement(ke.privateKey, rand)
 	if err != nil {
 		return nil, nil, err

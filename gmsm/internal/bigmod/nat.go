@@ -709,3 +709,70 @@ func (out *Nat) Exp(x *Nat, e []byte, m *Modulus) *Nat {
 
 	return out.montgomeryReduction(m)
 }
+
+// shiftIn calculates x = x << _W + y mod m.
+//
+// This assumes that x is already reduced mod m, and that y < 2^_W.
+func (x *Nat) shiftInNat(y uint, m *Nat) *Nat {
+	d := NewNat().reset(len(m.limbs))
+
+	// Eliminate bounds checks in the loop.
+	size := len(m.limbs)
+	xLimbs := x.limbs[:size]
+	dLimbs := d.limbs[:size]
+	mLimbs := m.limbs[:size]
+
+	// Each iteration of this loop computes x = 2x + b mod m, where b is a bit
+	// from y. Effectively, it left-shifts x and adds y one bit at a time,
+	// reducing it every time.
+	//
+	// To do the reduction, each iteration computes both 2x + b and 2x + b - m.
+	// The next iteration (and finally the return line) will use either result
+	// based on whether the subtraction underflowed.
+	needSubtraction := no
+	for i := _W - 1; i >= 0; i-- {
+		carry := (y >> i) & 1
+		var borrow uint
+		for i := 0; i < size; i++ {
+			l := ctSelect(needSubtraction, dLimbs[i], xLimbs[i])
+
+			res := l<<1 + carry
+			xLimbs[i] = res & _MASK
+			carry = res >> _W
+
+			res = xLimbs[i] - mLimbs[i] - borrow
+			dLimbs[i] = res & _MASK
+			borrow = res >> _W
+		}
+		// See Add for how carry (aka overflow), borrow (aka underflow), and
+		// needSubtraction relate.
+		needSubtraction = ctEq(carry, borrow)
+	}
+	return x.assign(needSubtraction, d)
+}
+
+func (out *Nat) ModNat(x *Nat, m *Nat) *Nat {
+	out.reset(len(m.limbs))
+	// Working our way from the most significant to the least significant limb,
+	// we can insert each limb at the least significant position, shifting all
+	// previous limbs left by _W. This way each limb will get shifted by the
+	// correct number of bits. We can insert at least N - 1 limbs without
+	// overflowing m. After that, we need to reduce every time we shift.
+	i := len(x.limbs) - 1
+	// For the first N - 1 limbs we can skip the actual shifting and position
+	// them at the shifted position, which starts at min(N - 2, i).
+	start := len(m.limbs) - 2
+	if i < start {
+		start = i
+	}
+	for j := start; j >= 0; j-- {
+		out.limbs[j] = x.limbs[i]
+		i--
+	}
+	// We shift in the remaining limbs, reducing modulo m each time.
+	for i >= 0 {
+		out.shiftInNat(x.limbs[i], m)
+		i--
+	}
+	return out
+}
