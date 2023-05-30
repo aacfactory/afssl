@@ -4,13 +4,13 @@ import (
 	"crypto"
 	"crypto/aes"
 	"crypto/cipher"
+	"crypto/ecdh"
 	"crypto/ecdsa"
 	"crypto/elliptic"
 	"crypto/sha512"
 	"crypto/subtle"
 	"errors"
 	"fmt"
-	"github.com/aacfactory/afssl/gmsm/internal/subtles"
 	"io"
 	"math/big"
 	"sync"
@@ -21,7 +21,6 @@ import (
 	"github.com/aacfactory/afssl/gmsm/kdf"
 	"github.com/aacfactory/afssl/gmsm/sm2/sm2ec"
 	"github.com/aacfactory/afssl/gmsm/sm3"
-	"github.com/emmansun/gmsm/ecdh"
 	"golang.org/x/crypto/cryptobyte"
 	"golang.org/x/crypto/cryptobyte/asn1"
 )
@@ -202,7 +201,7 @@ func encryptSM2EC(c *sm2Curve, pub *ecdsa.PublicKey, random io.Reader, msg []byt
 		}
 		C2Bytes := C2.Bytes()[1:]
 		c2 := kdf.Kdf(sm3.New(), C2Bytes, len(msg))
-		if subtles.ConstantTimeAllZero(c2) {
+		if subtle.ConstantTimeCompare(c2, nil) == 1 {
 			retryCount++
 			if retryCount > maxRetryLimit {
 				return nil, fmt.Errorf("sm2: A5, failed to calculate valid t, tried %v times", retryCount)
@@ -305,7 +304,7 @@ func decryptSM2EC(c *sm2Curve, priv *PrivateKey, ciphertext []byte, opts *Decryp
 	C2Bytes := C2.Bytes()[1:]
 	msgLen := len(c2)
 	msg := kdf.Kdf(sm3.New(), C2Bytes, msgLen)
-	if subtles.ConstantTimeAllZero(c2) {
+	if subtle.ConstantTimeCompare(c2, nil) == 1 {
 		return nil, ErrDecryption
 	}
 
@@ -690,6 +689,7 @@ func P256() elliptic.Curve {
 	return sm2ec.P256()
 }
 
+// todo remove when not used
 func PublicKeyToECDH(k *ecdsa.PublicKey) (*ecdh.PublicKey, error) {
 	c := curveToECDH(k.Curve)
 	if c == nil {
@@ -701,6 +701,7 @@ func PublicKeyToECDH(k *ecdsa.PublicKey) (*ecdh.PublicKey, error) {
 	return c.NewPublicKey(elliptic.Marshal(k.Curve, k.X, k.Y))
 }
 
+// todo remove when not used
 func (pri *PrivateKey) ECDH() (*ecdh.PrivateKey, error) {
 	c := curveToECDH(pri.Curve)
 	if c == nil {

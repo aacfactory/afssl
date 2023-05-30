@@ -6,7 +6,6 @@ import (
 	"crypto/subtle"
 	"errors"
 	"fmt"
-	"github.com/aacfactory/afssl/gmsm/internal/subtles"
 	"io"
 	"math/big"
 	"strings"
@@ -220,7 +219,7 @@ func encryptLegacy(random io.Reader, pub *ecdsa.PublicKey, msg []byte, opts *Enc
 		x2, y2 := curve.ScalarMult(pub.X, pub.Y, k.Bytes())
 
 		c2 := kdf.Kdf(sm3.New(), append(toBytes(curve, x2), toBytes(curve, y2)...), msgLen)
-		if subtles.ConstantTimeAllZero(c2) {
+		if subtle.ConstantTimeCompare(c2, nil) == 1 {
 			retryCount++
 			if retryCount > maxRetryLimit {
 				return nil, fmt.Errorf("sm2: A5, failed to calculate valid t, tried %v times", retryCount)
@@ -358,7 +357,7 @@ func rawDecrypt(priv *PrivateKey, x1, y1 *big.Int, c2, c3 []byte) ([]byte, error
 	x2, y2 := curve.ScalarMult(x1, y1, priv.D.Bytes())
 	msgLen := len(c2)
 	msg := kdf.Kdf(sm3.New(), append(toBytes(curve, x2), toBytes(curve, y2)...), msgLen)
-	if subtles.ConstantTimeAllZero(c2) {
+	if subtle.ConstantTimeCompare(c2, nil) == 1 {
 		return nil, ErrDecryption
 	}
 
