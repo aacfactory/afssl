@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"crypto"
 	"crypto/rand"
+	"crypto/x509"
 	"crypto/x509/pkix"
 	"encoding/asn1"
 	"errors"
@@ -63,9 +64,9 @@ type signedData struct {
 	Version                    int                        `asn1:"default:1"`
 	DigestAlgorithmIdentifiers []pkix.AlgorithmIdentifier `asn1:"set"`
 	ContentInfo                contentInfo
-	Certificates               rawCertificates        `asn1:"optional,tag:0"`
-	CRLs                       []pkix.CertificateList `asn1:"optional,tag:1"`
-	SignerInfos                []signerInfo           `asn1:"set"`
+	Certificates               rawCertificates       `asn1:"optional,tag:0"`
+	CRLs                       []x509.RevocationList `asn1:"optional,tag:1"`
+	SignerInfos                []signerInfo          `asn1:"set"`
 }
 
 type signerInfo struct {
@@ -331,13 +332,13 @@ func signAttributes(attrs []attribute, pkey crypto.PrivateKey, hasher crypto.Has
 
 	h := hasher.New()
 	h.Write(attrBytes)
-	hash := h.Sum(nil)
+	hashed := h.Sum(nil)
 
 	key, ok := pkey.(crypto.Signer)
 	if !ok {
 		return nil, errors.New("pkcs7: private key does not implement crypto.Signer")
 	}
-	return key.Sign(rand.Reader, hash, hasher)
+	return key.Sign(rand.Reader, hashed, hasher)
 }
 
 func marshalCertificates(certs []*smx509.Certificate) rawCertificates {
@@ -368,7 +369,7 @@ func DegenerateCertificate(cert []byte) ([]byte, error) {
 		Version:      1,
 		ContentInfo:  emptyContent,
 		Certificates: rawCert,
-		CRLs:         []pkix.CertificateList{},
+		CRLs:         []x509.RevocationList{},
 	}
 	content, err := asn1.Marshal(sd)
 	if err != nil {

@@ -3,6 +3,7 @@ package pkcs7
 import (
 	"crypto"
 	"crypto/rand"
+	"crypto/x509"
 	"crypto/x509/pkix"
 	"encoding/asn1"
 	"errors"
@@ -17,9 +18,9 @@ type signedEnvelopedData struct {
 	RecipientInfos             []recipientInfo            `asn1:"set"`
 	DigestAlgorithmIdentifiers []pkix.AlgorithmIdentifier `asn1:"set"`
 	EncryptedContentInfo       encryptedContentInfo
-	Certificates               rawCertificates        `asn1:"optional,tag:0"`
-	CRLs                       []pkix.CertificateList `asn1:"optional,tag:1"`
-	SignerInfos                []signerInfo           `asn1:"set"`
+	Certificates               rawCertificates       `asn1:"optional,tag:0"`
+	CRLs                       []x509.RevocationList `asn1:"optional,tag:1"`
+	SignerInfos                []signerInfo          `asn1:"set"`
 }
 
 func (data signedEnvelopedData) GetRecipient(cert *smx509.Certificate) *recipientInfo {
@@ -245,7 +246,7 @@ func (saed *SignedAndEnvelopedData) AddRecipient(recipient *smx509.Certificate) 
 	if err != nil {
 		return err
 	}
-	var keyEncryptionAlgorithm asn1.ObjectIdentifier = OIDEncryptionAlgorithmRSA
+	var keyEncryptionAlgorithm = OIDEncryptionAlgorithmRSA
 	if recipient.SignatureAlgorithm == smx509.SM2WithSM3 {
 		keyEncryptionAlgorithm = OIDKeyEncryptionAlgorithmSM2
 	} else if saed.isSM {

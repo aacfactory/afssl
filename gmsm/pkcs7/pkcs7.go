@@ -7,7 +7,6 @@ import (
 	"crypto/ecdsa"
 	"crypto/rsa"
 	"crypto/x509"
-	"crypto/x509/pkix"
 	"encoding/asn1"
 	"errors"
 	"fmt"
@@ -21,7 +20,7 @@ import (
 type PKCS7 struct {
 	Content      []byte
 	Certificates []*smx509.Certificate
-	CRLs         []pkix.CertificateList
+	CRLs         []x509.RevocationList
 	Signers      []signerInfo
 	raw          interface{}
 }

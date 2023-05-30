@@ -95,7 +95,7 @@ func verifySignature(p7 *PKCS7, signer signerInfo, truststore *smx509.CertPool, 
 	if err != nil {
 		return err
 	}
-	return ee.CheckSignature(sigalg, signedData, signer.EncryptedDigest)
+	return ee.CheckSignature(smx509.SignatureAlgorithm(sigalg), signedData, signer.EncryptedDigest)
 }
 
 func (p7 *PKCS7) GetOnlySigner() *smx509.Certificate {

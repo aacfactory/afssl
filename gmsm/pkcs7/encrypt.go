@@ -99,7 +99,7 @@ func encrypt(cipher pkcs.Cipher, content []byte, recipients []*smx509.Certificat
 		if err != nil {
 			return nil, err
 		}
-		var keyEncryptionAlgorithm asn1.ObjectIdentifier = OIDEncryptionAlgorithmRSA
+		var keyEncryptionAlgorithm = OIDEncryptionAlgorithmRSA
 		if recipient.SignatureAlgorithm == smx509.SM2WithSM3 {
 			keyEncryptionAlgorithm = OIDKeyEncryptionAlgorithmSM2
 		} else if isSM {
@@ -174,7 +174,7 @@ func encryptUsingPSK(isSM bool, cipher pkcs.Cipher, content []byte, key []byte) 
 		return nil, err
 	}
 
-	var contentType asn1.ObjectIdentifier = OIDEncryptedData
+	var contentType = OIDEncryptedData
 	if isSM {
 		contentType = SM2OIDEncryptedData
 	}
