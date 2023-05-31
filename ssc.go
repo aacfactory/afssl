@@ -16,19 +16,35 @@ func SSC(caPEM []byte, keyPEM []byte) (serverTLS *tls.Config, clientTLS *tls.Con
 		return
 	}
 	config := CertificateConfig{
-		Country:            ca.Subject.Country[0],
-		Province:           ca.Subject.Province[0],
-		City:               ca.Subject.Locality[0],
-		Organization:       ca.Subject.Organization[0],
-		OrganizationalUnit: ca.Subject.OrganizationalUnit[0],
-		CommonName:         ca.Subject.CommonName,
-		IPs:                nil,
-		Emails:             nil,
-		DNSNames:           nil,
+		Issuer: &CertificatePkixName{
+			Country:            ca.Issuer.Country[0],
+			Province:           ca.Issuer.Province[0],
+			Locality:           ca.Issuer.Locality[0],
+			Organization:       ca.Issuer.Organization[0],
+			OrganizationalUnit: ca.Issuer.OrganizationalUnit[0],
+			StreetAddress:      ca.Issuer.StreetAddress[0],
+			PostalCode:         ca.Issuer.PostalCode[0],
+			SerialNumber:       "",
+			CommonName:         ca.Issuer.CommonName,
+		},
+		Subject: &CertificatePkixName{
+			Country:            ca.Subject.Country[0],
+			Province:           ca.Subject.Province[0],
+			Locality:           ca.Subject.Locality[0],
+			Organization:       ca.Subject.Organization[0],
+			OrganizationalUnit: ca.Subject.OrganizationalUnit[0],
+			StreetAddress:      ca.Subject.StreetAddress[0],
+			PostalCode:         ca.Subject.PostalCode[0],
+			SerialNumber:       "",
+			CommonName:         ca.Subject.CommonName,
+		},
+		IPs:      nil,
+		Emails:   nil,
+		DNSNames: nil,
 	}
 	cas := x509.NewCertPool()
 	if !cas.AppendCertsFromPEM(caPEM) {
-		err = fmt.Errorf("append into cert pool failed")
+		err = fmt.Errorf("afssl: append into cert pool failed")
 		return
 	}
 	// server
@@ -67,19 +83,18 @@ func SSC(caPEM []byte, keyPEM []byte) (serverTLS *tls.Config, clientTLS *tls.Con
 }
 
 func CreateCA(cn string, expireDays int) (crtPEM []byte, keyPEM []byte, err error) {
+	if cn == "" {
+		cn = "AFSSL"
+	}
 	if expireDays < 1 {
 		expireDays = 3650
 	}
 	crtPEM, keyPEM, err = GenerateCertificate(CertificateConfig{
-		Country:            "",
-		Province:           "",
-		City:               "",
-		Organization:       "",
-		OrganizationalUnit: "",
-		CommonName:         cn,
-		IPs:                nil,
-		Emails:             nil,
-		DNSNames:           nil,
+		Subject: &CertificatePkixName{
+			Country:      "CN",
+			Organization: "FNS",
+			CommonName:   cn,
+		},
 	}, CA(), WithExpirationDays(expireDays))
 	return
 }

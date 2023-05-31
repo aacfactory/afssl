@@ -26,6 +26,43 @@ type pkcs8 struct {
 	PrivateKey []byte
 }
 
+const (
+	NotGMKey = GMKeyType("NOT_GN_KEY")
+	SM2Key   = GMKeyType("SM2")
+	SM9Key   = GMKeyType("SM9")
+)
+
+type GMKeyType string
+
+func GetGMPrivateKeyType(der []byte) (keyType GMKeyType, err error) {
+	var privKey pkcs8
+	if _, err := asn1.Unmarshal(der, &privKey); err != nil {
+		if _, err := asn1.Unmarshal(der, &ecPrivateKey{}); err == nil {
+			return NotGMKey, errors.New("x509: failed to get gm private private key (use ParseECPrivateKey instead for this key format)")
+		}
+		return NotGMKey, errors.New("x509: failed to get gm private private key while unmarshal asn1: " + err.Error())
+	}
+
+	switch {
+	case privKey.Algo.Algorithm.Equal(oidPublicKeyECDSA):
+		bytes := privKey.Algo.Parameters.FullBytes
+		namedCurveOID := new(asn1.ObjectIdentifier)
+		if _, err := asn1.Unmarshal(bytes, namedCurveOID); err != nil {
+			return NotGMKey, errors.New("x509: failed to get gm private private key while unmarshal curve: " + err.Error())
+		}
+		if namedCurveOID.Equal(oidNamedCurveP256SM2) {
+			keyType = SM2Key
+			break
+		}
+
+	case privKey.Algo.Algorithm.Equal(oidSM9), privKey.Algo.Algorithm.Equal(oidSM9Sign), privKey.Algo.Algorithm.Equal(oidSM9Enc):
+		keyType = SM9Key
+	default:
+		keyType = NotGMKey
+	}
+	return
+}
+
 // ParsePKCS8PrivateKey parses an unencrypted private key in PKCS #8, ASN.1 DER form.
 //
 // It returns a *rsa.PrivateKey, a *ecdsa.PrivateKey, a ed25519.PrivateKey (not
@@ -353,6 +390,14 @@ func marshalPKCS8ECPrivateKey(k *ecdsa.PrivateKey) ([]byte, error) {
 		return nil, errors.New("x509: failed to marshal EC private key while building PKCS#8: " + err.Error())
 	}
 	return asn1.Marshal(privKey)
+}
+
+func ParseSM9PrivateKey(der []byte) (key interface{}, err error) {
+	var privKey pkcs8
+	if _, err := asn1.Unmarshal(der, &privKey); err != nil {
+		return nil, errors.New("x509: failed to parse SM9 private key while unmarshal asn1: " + err.Error())
+	}
+	return parseSM9PrivateKey(privKey)
 }
 
 func parseSM9PrivateKey(privKey pkcs8) (key interface{}, err error) {

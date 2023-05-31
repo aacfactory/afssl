@@ -12,15 +12,9 @@ import (
 
 func TestSSC(t *testing.T) {
 	caPEM, keyPEM, caErr := afssl.GenerateCertificate(afssl.CertificateConfig{
-		Country:            "",
-		Province:           "",
-		City:               "",
-		Organization:       "",
-		OrganizationalUnit: "",
-		CommonName:         "AFSSL",
-		IPs:                nil,
-		Emails:             nil,
-		DNSNames:           nil,
+		IPs:      nil,
+		Emails:   nil,
+		DNSNames: nil,
 	}, afssl.CA())
 	if caErr != nil {
 		t.Error("ca:", caErr)

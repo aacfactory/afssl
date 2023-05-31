@@ -7,19 +7,9 @@ import (
 )
 
 func TestGenerateCertificate(t *testing.T) {
-	config := afssl.CertificateConfig{
-		Country:            "",
-		Province:           "",
-		City:               "",
-		Organization:       "",
-		OrganizationalUnit: "",
-		CommonName:         "AFSSL",
-		IPs:                nil,
-		Emails:             nil,
-		DNSNames:           nil,
-	}
+	config := afssl.CertificateConfig{}
 	// ca
-	caPEM, caKeyPEM, caErr := afssl.GenerateCertificate(config, afssl.CA())
+	caPEM, caKeyPEM, caErr := afssl.GenerateCertificate(config, afssl.CA(), afssl.WithKeyType(afssl.SM2()))
 	if caErr != nil {
 		t.Error("ca", caErr)
 		return
