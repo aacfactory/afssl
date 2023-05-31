@@ -9,17 +9,7 @@ go get github.com/aacfactory/afssl
 ## Usage
 Generate Self Signed SSL.
 ```go
-config := afssl.CertificateConfig{
-    Country:            "CN",
-    Province:           "Shanghai",
-    City:               "Shanghai",
-    Organization:       "AACFACTORY",
-    OrganizationalUnit: "TECH",
-    CommonName:         "AFSSL",
-    IPs:                nil,
-    Emails:             nil,
-    DNSNames:           nil,
-}
+config := afssl.CertificateConfig{}
 // ca
 caPEM, caKeyPEM, caErr := afssl.GenerateCertificate(config, afssl.CA())
 if caErr != nil {
