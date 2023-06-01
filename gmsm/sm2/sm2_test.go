@@ -67,6 +67,19 @@ func TestNewKeyExchange(t *testing.T) {
 		t.Fatal(rAErr)
 	}
 
+	p, encodeErr := initiator.Marshal()
+	if encodeErr != nil {
+		t.Fatal(encodeErr)
+	}
+	initiator0, decodeErr := sm2.UnmarshalKeyExchange(p)
+	if decodeErr != nil {
+		t.Fatal(decodeErr)
+	}
+	if !initiator.Equal(initiator0) {
+		t.Fatal("not equal")
+	}
+	initiator = initiator0
+
 	rB, s2, rBErr := responder.Respond(rand.Reader, rA)
 	if rBErr != nil {
 		t.Fatal(rBErr)
