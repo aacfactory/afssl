@@ -35,3 +35,12 @@ if clientErr != nil {
 fmt.Println(string(clientPEM))
 fmt.Println(string(clientKeyPEM))
 ```
+
+## Use as bin
+```shell
+go install github.com/aacfactory/afssl/commands/afssl@latest
+```
+
+```shell
+afssl --type={RSA,ECDSA,ED25519,SM2} --ca --expire={days} --cn={CN} {dst path}
+```
