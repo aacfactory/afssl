@@ -74,6 +74,7 @@ func WithParent(certPEM []byte, keyPEM []byte) GenerateCertificateOption {
 				return parseCertErr
 			}
 			options.parent = cert
+			options.expire = cert.NotAfter.Sub(time.Now())/24 - 1
 			break
 		default:
 			cert, parseCertErr := x509.ParseCertificate(certBlock.Bytes)
@@ -81,6 +82,8 @@ func WithParent(certPEM []byte, keyPEM []byte) GenerateCertificateOption {
 				return parseCertErr
 			}
 			options.parent = cert
+			options.expire = cert.NotAfter.Sub(time.Now())/24 - 1
+			break
 		}
 		return nil
 	}
@@ -167,6 +170,11 @@ func GenerateCertificate(config CertificateConfig, opts ...GenerateCertificateOp
 			}
 		}
 	}
+	if opt.expire < 1 {
+		err = fmt.Errorf("afssl: generate certificate failed, invalid expire days")
+		return
+	}
+
 	// KEY
 	var key any
 	var isGM bool

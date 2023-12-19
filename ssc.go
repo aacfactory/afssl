@@ -5,7 +5,6 @@ import (
 	"crypto/x509"
 	"encoding/pem"
 	"fmt"
-	"time"
 )
 
 func SSC(caPEM []byte, keyPEM []byte) (serverTLS *tls.Config, clientTLS *tls.Config, err error) {
@@ -48,7 +47,7 @@ func SSC(caPEM []byte, keyPEM []byte) (serverTLS *tls.Config, clientTLS *tls.Con
 		return
 	}
 	// server
-	serverCert, serverKey, createServerErr := GenerateCertificate(config, WithParent(caPEM, keyPEM), WithExpirationDays(int(ca.NotAfter.Sub(time.Now()).Hours())/24))
+	serverCert, serverKey, createServerErr := GenerateCertificate(config, WithParent(caPEM, keyPEM))
 	if createServerErr != nil {
 		err = createServerErr
 		return
@@ -64,7 +63,7 @@ func SSC(caPEM []byte, keyPEM []byte) (serverTLS *tls.Config, clientTLS *tls.Con
 		ClientAuth:   tls.RequireAndVerifyClientCert,
 	}
 	// client
-	clientCert, clientKey, createClientErr := GenerateCertificate(config, WithParent(caPEM, keyPEM), WithExpirationDays(int(ca.NotAfter.Sub(time.Now()).Hours())/24))
+	clientCert, clientKey, createClientErr := GenerateCertificate(config, WithParent(caPEM, keyPEM))
 	if createClientErr != nil {
 		err = createClientErr
 		return
