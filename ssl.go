@@ -75,6 +75,53 @@ func WithParent(certPEM []byte, keyPEM []byte) GenerateCertificateOption {
 			}
 			options.parent = cert
 			options.expire = cert.NotAfter.Sub(time.Now())/24 - 1
+			country := ""
+			if len(cert.Subject.Country) > 0 {
+				country = cert.Subject.Country[0]
+			}
+			province := ""
+			if len(cert.Subject.Province) > 0 {
+				province = cert.Subject.Province[0]
+			}
+			locality := ""
+			if len(cert.Subject.Locality) > 0 {
+				locality = cert.Subject.Locality[0]
+			}
+			organization := ""
+			if len(cert.Subject.Organization) > 0 {
+				organization = cert.Subject.Organization[0]
+			}
+			organizationalUnit := ""
+			if len(cert.Subject.OrganizationalUnit) > 0 {
+				organizationalUnit = cert.Subject.OrganizationalUnit[0]
+			}
+			streetAddress := ""
+			if len(cert.Subject.StreetAddress) > 0 {
+				streetAddress = cert.Subject.StreetAddress[0]
+			}
+			postalCode := ""
+			if len(cert.Subject.PostalCode) > 0 {
+				postalCode = cert.Subject.PostalCode[0]
+			}
+			serialNumber := ""
+			if len(cert.Subject.SerialNumber) > 0 {
+				serialNumber = cert.Subject.SerialNumber
+			}
+			commonName := ""
+			if len(cert.Subject.CommonName) > 0 {
+				serialNumber = cert.Subject.CommonName
+			}
+			options.parentSubject = &CertificatePkixName{
+				Country:            country,
+				Province:           province,
+				Locality:           locality,
+				Organization:       organization,
+				OrganizationalUnit: organizationalUnit,
+				StreetAddress:      streetAddress,
+				PostalCode:         postalCode,
+				SerialNumber:       serialNumber,
+				CommonName:         commonName,
+			}
 			break
 		default:
 			cert, parseCertErr := x509.ParseCertificate(certBlock.Bytes)
@@ -83,6 +130,53 @@ func WithParent(certPEM []byte, keyPEM []byte) GenerateCertificateOption {
 			}
 			options.parent = cert
 			options.expire = cert.NotAfter.Sub(time.Now())/24 - 1
+			country := ""
+			if len(cert.Subject.Country) > 0 {
+				country = cert.Subject.Country[0]
+			}
+			province := ""
+			if len(cert.Subject.Province) > 0 {
+				province = cert.Subject.Province[0]
+			}
+			locality := ""
+			if len(cert.Subject.Locality) > 0 {
+				locality = cert.Subject.Locality[0]
+			}
+			organization := ""
+			if len(cert.Subject.Organization) > 0 {
+				organization = cert.Subject.Organization[0]
+			}
+			organizationalUnit := ""
+			if len(cert.Subject.OrganizationalUnit) > 0 {
+				organizationalUnit = cert.Subject.OrganizationalUnit[0]
+			}
+			streetAddress := ""
+			if len(cert.Subject.StreetAddress) > 0 {
+				streetAddress = cert.Subject.StreetAddress[0]
+			}
+			postalCode := ""
+			if len(cert.Subject.PostalCode) > 0 {
+				postalCode = cert.Subject.PostalCode[0]
+			}
+			serialNumber := ""
+			if len(cert.Subject.SerialNumber) > 0 {
+				serialNumber = cert.Subject.SerialNumber
+			}
+			commonName := ""
+			if len(cert.Subject.CommonName) > 0 {
+				serialNumber = cert.Subject.CommonName
+			}
+			options.parentSubject = &CertificatePkixName{
+				Country:            country,
+				Province:           province,
+				Locality:           locality,
+				Organization:       organization,
+				OrganizationalUnit: organizationalUnit,
+				StreetAddress:      streetAddress,
+				PostalCode:         postalCode,
+				SerialNumber:       serialNumber,
+				CommonName:         commonName,
+			}
 			break
 		}
 		return nil
@@ -90,12 +184,13 @@ func WithParent(certPEM []byte, keyPEM []byte) GenerateCertificateOption {
 }
 
 type GenerateCertificateOptions struct {
-	keyType      KeyType
-	serialNumber *big.Int
-	expire       time.Duration
-	isCA         bool
-	parent       any
-	parentKey    any
+	keyType       KeyType
+	serialNumber  *big.Int
+	expire        time.Duration
+	isCA          bool
+	parent        any
+	parentKey     any
+	parentSubject *CertificatePkixName
 }
 
 type CertificatePkixName struct {
@@ -146,16 +241,11 @@ var defaultPkixName = &CertificatePkixName{
 }
 
 func GenerateCertificate(config CertificateConfig, opts ...GenerateCertificateOption) (certPEM []byte, keyPEM []byte, err error) {
-	// SN
-	serialNumber, randSNErr := rand.Int(rand.Reader, new(big.Int).Lsh(big.NewInt(1), 128))
-	if randSNErr != nil {
-		err = fmt.Errorf("afssl: generate certificate failed, rand serial number failed, %v", randSNErr)
-		return
-	}
+
 	// OPT
 	opt := &GenerateCertificateOptions{
 		keyType:      ECDSA(),
-		serialNumber: serialNumber,
+		serialNumber: nil,
 		expire:       365 * 24 * time.Hour,
 		isCA:         false,
 		parent:       nil,
@@ -170,9 +260,28 @@ func GenerateCertificate(config CertificateConfig, opts ...GenerateCertificateOp
 			}
 		}
 	}
+	// expire
 	if opt.expire < 1 {
 		err = fmt.Errorf("afssl: generate certificate failed, invalid expire days")
 		return
+	}
+	// SN
+	if opt.serialNumber == nil {
+		serialNumber, randSNErr := rand.Int(rand.Reader, new(big.Int).Lsh(big.NewInt(1), 128))
+		if randSNErr != nil {
+			err = fmt.Errorf("afssl: generate certificate failed, rand serial number failed, %v", randSNErr)
+			return
+		}
+		opt.serialNumber = serialNumber
+	}
+
+	if opt.parentSubject != nil {
+		if config.Subject == nil {
+			config.Subject = opt.parentSubject
+		}
+		if config.Issuer == nil {
+			config.Issuer = opt.parentSubject
+		}
 	}
 
 	// KEY
@@ -276,7 +385,7 @@ func GenerateCertificate(config CertificateConfig, opts ...GenerateCertificateOp
 			SignatureAlgorithm:    x509.SignatureAlgorithm(signatureAlgorithm),
 			PublicKey:             pub,
 			Version:               0,
-			SerialNumber:          serialNumber,
+			SerialNumber:          opt.serialNumber,
 			Issuer:                issuer.Name(),
 			Subject:               subject.Name(),
 			NotBefore:             time.Now().Add(-24 * time.Hour),
@@ -311,7 +420,7 @@ func GenerateCertificate(config CertificateConfig, opts ...GenerateCertificateOp
 			SignatureAlgorithm: x509.SignatureAlgorithm(signatureAlgorithm),
 			PublicKey:          pub,
 			Version:            0,
-			SerialNumber:       serialNumber,
+			SerialNumber:       opt.serialNumber,
 			Issuer:             issuer.Name(),
 			Subject:            subject.Name(),
 			NotBefore:          time.Now().Add(-24 * time.Hour),

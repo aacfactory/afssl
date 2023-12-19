@@ -3,7 +3,6 @@ package configs
 import (
 	"crypto/tls"
 	"crypto/x509"
-	"encoding/pem"
 	"errors"
 	"github.com/aacfactory/afssl"
 	"os"
@@ -103,27 +102,7 @@ func (server *Server) Load() (v *tls.Config, err error) {
 		return
 	}
 
-	block, _ := pem.Decode(caPEM)
-	caCert, parseCAErr := x509.ParseCertificate(block.Bytes)
-	if parseCAErr != nil {
-		err = errors.Join(errors.New("afssl: load server tls failed"), errors.New("parse ca failed"), parseCAErr)
-		return
-	}
-
-	config := afssl.CertificateConfig{
-		Subject: &afssl.CertificatePkixName{
-			Country:            caCert.Subject.Country[0],
-			Province:           caCert.Subject.Province[0],
-			Locality:           caCert.Subject.Locality[0],
-			Organization:       caCert.Subject.Organization[0],
-			OrganizationalUnit: caCert.Subject.OrganizationalUnit[0],
-			CommonName:         caCert.Subject.CommonName,
-		},
-		IPs:      nil,
-		Emails:   nil,
-		DNSNames: nil,
-	}
-
+	config := afssl.CertificateConfig{}
 	certPEM, keyPEM, createClientErr := afssl.GenerateCertificate(config, afssl.WithParent(caPEM, caKeyPEM))
 	if createClientErr != nil {
 		err = errors.Join(errors.New("afssl: load server tls failed"), errors.New("generate by ca failed"), createClientErr)

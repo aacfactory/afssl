@@ -11,11 +11,7 @@ import (
 )
 
 func TestSSC(t *testing.T) {
-	caPEM, keyPEM, caErr := afssl.GenerateCertificate(afssl.CertificateConfig{
-		IPs:      nil,
-		Emails:   nil,
-		DNSNames: nil,
-	}, afssl.CA())
+	caPEM, keyPEM, caErr := afssl.CreateCA("CN", 10)
 	if caErr != nil {
 		t.Error("ca:", caErr)
 		return
